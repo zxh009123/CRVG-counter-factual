@@ -13,15 +13,15 @@ import torchvision.transforms as transforms
 
 
 class ImageDataset(Dataset):
-    def __init__(self, root="dataset/json", transforms_street=[transforms.ToTensor(),],transforms_sat=[transforms.ToTensor(),], mode='train', zooms=[20]):
+    def __init__(self, root="../scratch/CVUSA/dataset/splits/", transforms_street=[transforms.ToTensor(),],transforms_sat=[transforms.ToTensor(),], mode='train', zooms=[20]):
         self.zooms = zooms
         self.transforms_street = transforms.Compose(transforms_street)
         self.transforms_sat = transforms.Compose(transforms_sat)
 
         if mode == "val":
-            self.file = "../scratch/CVUSA/dataset/splits/val-19zl.csv"
+            self.file = root + "val-19zl.csv"
         elif mode == "train":
-            self.file = "../scratch/CVUSA/dataset/splits/train-19zl.csv"
+            self.file = root + "train-19zl.csv"
         else:
             raise RuntimeError("no such mode")
 

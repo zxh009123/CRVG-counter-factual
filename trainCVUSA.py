@@ -250,6 +250,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--save_suffix", type=str, default='test2', help='name of the model at the end')
+    parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/splits/', help='dir to the dataset')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument('--cf', default=False, action='store_true')
@@ -266,7 +267,7 @@ if __name__ == "__main__":
     is_cf = opt.cf
     dataset_name = "CVUSA"
 
-    save_name = f"{dataset_name}_{opt.lr}_{is_cf}_{number_SAFA_heads}_{batch_size}_{opt.save_suffix}"
+    save_name = f"{dataset_name}_{opt.lr}_{is_cf}_{opt.alpha}_{number_SAFA_heads}_{batch_size}_{opt.save_suffix}"
     if not os.path.exists(save_name):
         os.makedirs(save_name)
     else:
@@ -283,7 +284,7 @@ if __name__ == "__main__":
                     ]
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    dataloader = DataLoader(ImageDataset(transforms_street=transforms_street,transforms_sat=transforms_sate, mode="train", zooms=[20]),\
+    dataloader = DataLoader(ImageDataset(root = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sate, mode="train", zooms=[20]),\
          batch_size=batch_size, shuffle=True, num_workers=8)
 
     validateloader = DataLoader(ImageDataset(transforms_street=transforms_street,transforms_sat=transforms_sate, mode="val", zooms=[20]),\
