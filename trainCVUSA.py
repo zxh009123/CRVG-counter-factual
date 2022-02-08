@@ -210,10 +210,10 @@ def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=
 #     loss = (loss_s2p + loss_p2s) / 2.0
 #     return loss
 
-def CFLoss(vecs, hat_vecs, loss_weight=1):
-    dists = F.cosine_similarity(vecs, hat_vecs)
+def CFLoss(vecs, hat_vecs, loss_weight=10):
+    loss = (F.cosine_similarity(vecs, hat_vecs) + 1.0) / 2.0
     
-    loss = torch.log(1 + torch.exp(loss_weight * dists))
+    # loss = torch.log(1 + torch.exp(loss_weight * loss))
 
     loss = loss.sum() / vecs.shape[0]
 
@@ -249,7 +249,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='test2', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='cos', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/splits/', help='dir to the dataset')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
@@ -298,9 +298,14 @@ if __name__ == "__main__":
     lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 20).step)
 
     print("start training...")
-    epoch_loss = 0
+
     best_epoch = {'acc':0, 'epoch':0}
     for epoch in range(number_of_epoch):
+        if is_cf:
+            epoch_triplet_loss = 0
+            epoch_cf_loss = 0
+        else:
+            epoch_loss = 0
         model.train()
         for batch in tqdm(dataloader, disable=opt.verbose):
             sat = batch['satellite'].to(device)
@@ -319,26 +324,40 @@ if __name__ == "__main__":
             if is_cf:
                 CFLoss_sat= CFLoss(sat_global, fake_sat_global)
                 CFLoss_grd = CFLoss(grd_global, fake_grd_global)
-                loss = triplet_loss + opt.alpha * (CFLoss_sat + CFLoss_grd)
+                CFLoss_total = opt.alpha * (CFLoss_sat + CFLoss_grd) / 2.0
+                loss = triplet_loss + CFLoss_total
                 # print(loss)
                 # print(CFLoss_sat)
                 # print(CFLoss_grd)
                 # print("============")
+                epoch_triplet_loss += triplet_loss.item()
+                epoch_cf_loss += CFLoss_total.item()
             else:
                 loss = triplet_loss
+                epoch_loss += loss.item()
                 # print(loss)
                 # print("============")
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
 
-            epoch_loss += loss.item()
         lrSchedule.step()
-        epoch_loss = float(epoch_loss) / float(len(dataloader))
-        print("---------loss---------")
-        print(f"Epoch {epoch} Loss {epoch_loss}")
-        writer.add_scalar('loss', epoch_loss, epoch)
-        print("----------------------")
+        print(f"==============Summary of epoch {epoch} ====================")
+        if is_cf:
+            current_triplet_loss = float(epoch_triplet_loss) / float(len(dataloader))
+            current_cf_loss = float(epoch_cf_loss) / float(len(dataloader))
+            print("---------loss---------")
+            print(f"Epoch {epoch} CF_Loss: {current_cf_loss}")
+            print(f"Epoch {epoch} TRI_Loss: {current_triplet_loss}")
+            writer.add_scalar('triplet_loss', current_triplet_loss, epoch)
+            writer.add_scalar('cf_loss', current_cf_loss, epoch)
+            print("----------------------")
+        else:
+            epoch_loss = float(epoch_loss) / float(len(dataloader))
+            print("---------loss---------")
+            print(f"Epoch {epoch} Loss {epoch_loss}")
+            writer.add_scalar('loss', epoch_loss, epoch)
+            print("----------------------")
 
 
         valSateFeatures = None
@@ -369,7 +388,7 @@ if __name__ == "__main__":
                     valStreetFeature = torch.cat((valStreetFeature, grd_global.detach()), dim=0)
 
             valAcc = ValidateAll(valStreetFeature, valSateFeatures)
-            print(f"==============Summary of epoch {epoch} on validation set=================")
+            print(f"-----------validation result---------------")
             try:
                 #print epoch loss
                 top1 = valAcc[0, 1]
@@ -388,8 +407,9 @@ if __name__ == "__main__":
 
             if top1 > best_epoch['acc']:
                 best_epoch['acc'] = top1
-                best_epoch['epoch'] = epoch + 1
+                best_epoch['epoch'] = epoch
                 save_model(save_name, model, epoch)
+            print(f"=================================================")
 
     # print(f'best acc: {best_epoch['acc']} at epoch {best_epoch['epoch']}')
     print("best acc : ", best_epoch['acc'])
