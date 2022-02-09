@@ -13,15 +13,16 @@ import torchvision.transforms as transforms
 
 
 class ImageDataset(Dataset):
-    def __init__(self, root="../scratch/CVUSA/dataset/splits/", transforms_street=[transforms.ToTensor(),],transforms_sat=[transforms.ToTensor(),], mode='train', zooms=[20]):
+    def __init__(self, data_dir="../scratch/CVUSA/dataset/", transforms_street=[transforms.ToTensor(),],transforms_sat=[transforms.ToTensor(),], mode='train', zooms=[20]):
         self.zooms = zooms
+        self.data_dir = data_dir
         self.transforms_street = transforms.Compose(transforms_street)
         self.transforms_sat = transforms.Compose(transforms_sat)
 
         if mode == "val":
-            self.file = root + "val-19zl.csv"
+            self.file = os.path.join(self.data_dir, "splits", "val-19zl.csv")
         elif mode == "train":
-            self.file = root + "train-19zl.csv"
+            self.file = os.path.join(self.data_dir, "splits", "train-19zl.csv")
         else:
             raise RuntimeError("no such mode")
 
@@ -38,8 +39,8 @@ class ImageDataset(Dataset):
     def __getitem__(self, index):
         satellite_file, ground_file = self.data_list[index]
 
-        satellite = self.transforms_sat(Image.open(os.path.join("../scratch/CVUSA/dataset", satellite_file)))
-        ground = self.transforms_street(Image.open(os.path.join("../scratch/CVUSA/dataset", ground_file)))
+        satellite = self.transforms_sat(Image.open(os.path.join(self.data_dir, satellite_file)))
+        ground = self.transforms_street(Image.open(os.path.join(self.data_dir, ground_file)))
 
         return {'satellite':satellite, 'ground':ground}
 

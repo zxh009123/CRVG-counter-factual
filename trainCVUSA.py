@@ -210,10 +210,10 @@ def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=
 #     loss = (loss_s2p + loss_p2s) / 2.0
 #     return loss
 
-def CFLoss(vecs, hat_vecs, loss_weight=10):
-    loss = (F.cosine_similarity(vecs, hat_vecs) + 1.0) / 2.0
+def CFLoss(vecs, hat_vecs, loss_weight=20):
+    loss = F.cosine_similarity(vecs, hat_vecs)
     
-    # loss = torch.log(1 + torch.exp(loss_weight * loss))
+    loss = torch.log(1 + torch.exp(loss_weight * loss))
 
     loss = loss.sum() / vecs.shape[0]
 
@@ -249,8 +249,8 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='cos', help='name of the model at the end')
-    parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/splits/', help='dir to the dataset')
+    parser.add_argument("--save_suffix", type=str, default='amd_test', help='name of the model at the end')
+    parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument('--cf', default=False, action='store_true')
@@ -284,10 +284,10 @@ if __name__ == "__main__":
                     ]
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    dataloader = DataLoader(ImageDataset(root = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sate, mode="train", zooms=[20]),\
+    dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sate, mode="train", zooms=[20]),\
          batch_size=batch_size, shuffle=True, num_workers=8)
 
-    validateloader = DataLoader(ImageDataset(transforms_street=transforms_street,transforms_sat=transforms_sate, mode="val", zooms=[20]),\
+    validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sate, mode="val", zooms=[20]),\
          batch_size=batch_size, shuffle=True, num_workers=8)
 
     model = SAFA_vgg(n_heads=number_SAFA_heads)
