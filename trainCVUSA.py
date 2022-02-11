@@ -15,6 +15,7 @@ import argparse
 
 import torch.nn as nn
 from torchvision import models
+from SAFA_TR import SAFA_TR
 
 STREET_IMG_WIDTH = 616
 STREET_IMG_HEIGHT = 112
@@ -58,37 +59,44 @@ class SA(nn.Module):
 class SAFA_vgg(nn.Module):
     def __init__(self, n_heads = 1):
         super().__init__()
-        self.backbone_grd = models.vgg16(pretrained=True)
-        self.backbone_sat = models.vgg16(pretrained=True)
+        # self.backbone_grd = models.vgg16(pretrained=True)
+        # self.backbone_sat = models.vgg16(pretrained=True)
 
-        feats_list = list(self.backbone_grd.features)
-        feats_list = feats_list[:-1]
-        new_feats_list = []
-        for i in range(len(feats_list)):
-            new_feats_list.append(feats_list[i])
-            if isinstance(feats_list[i], nn.Conv2d) and i > 14:
-                new_feats_list.append(nn.Dropout(p=0.2, inplace=True))
-        self.backbone_grd.features = nn.Sequential(*new_feats_list)
+        # feats_list = list(self.backbone_grd.features)
+        # feats_list = feats_list[:-1]
+        # new_feats_list = []
+        # for i in range(len(feats_list)):
+        #     new_feats_list.append(feats_list[i])
+        #     if isinstance(feats_list[i], nn.Conv2d) and i > 14:
+        #         new_feats_list.append(nn.Dropout(p=0.2, inplace=True))
+        # self.backbone_grd.features = nn.Sequential(*new_feats_list)
 
-        modules=list(self.backbone_grd.children())
-        modules = modules[:len(modules) - 2]
-        self.backbone_grd = nn.Sequential(*modules)
+        # modules=list(self.backbone_grd.children())
+        # modules = modules[:len(modules) - 2]
+        # self.backbone_grd = nn.Sequential(*modules)
 
-        feats_list = list(self.backbone_sat.features)
-        feats_list = feats_list[:-1]
-        new_feats_list = []
-        for i in range(len(feats_list)):
-            new_feats_list.append(feats_list[i])
-            if isinstance(feats_list[i], nn.Conv2d) and i > 14:
-                new_feats_list.append(nn.Dropout(p=0.2, inplace=True))
-        self.backbone_sat.features = nn.Sequential(*new_feats_list)
+        # feats_list = list(self.backbone_sat.features)
+        # feats_list = feats_list[:-1]
+        # new_feats_list = []
+        # for i in range(len(feats_list)):
+        #     new_feats_list.append(feats_list[i])
+        #     if isinstance(feats_list[i], nn.Conv2d) and i > 14:
+        #         new_feats_list.append(nn.Dropout(p=0.2, inplace=True))
+        # self.backbone_sat.features = nn.Sequential(*new_feats_list)
 
-        modules=list(self.backbone_sat.children())
-        modules = modules[:len(modules) - 2]
-        self.backbone_sat = nn.Sequential(*modules)
+        # modules=list(self.backbone_sat.children())
+        # modules = modules[:len(modules) - 2]
+        # self.backbone_sat = nn.Sequential(*modules)
 
-        self.spatial_aware_grd = SA(in_dim=266, num=n_heads)
-        self.spatial_aware_sat = SA(in_dim=256, num=n_heads)
+        # self.spatial_aware_grd = SA(in_dim=266, num=n_heads)
+        # self.spatial_aware_sat = SA(in_dim=256, num=n_heads)
+
+
+        self.backbone_grd = ResNet34()
+        self.backbone_sat = ResNet34()
+
+        self.spatial_aware_grd = SA(in_dim=1078, num=n_heads)
+        self.spatial_aware_sat = SA(in_dim=1024, num=n_heads)
 
         self.tanh = nn.Tanh()
 
@@ -103,8 +111,6 @@ class SAFA_vgg(nn.Module):
         grd_sa = self.spatial_aware_grd(grd_x)
         sat_sa = self.tanh(sat_sa)
         grd_sa = self.tanh(grd_sa)
-        # print("sat_global : ",sat_global.shape)
-        # print("grd_global : ",grd_global.shape)
         if is_cf:
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1, 1)
             fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1, 1)
@@ -114,6 +120,9 @@ class SAFA_vgg(nn.Module):
 
             sat_global = F.normalize(sat_global, p=2, dim=1)
             grd_global = F.normalize(grd_global, p=2, dim=1)
+
+            # print("sat_global : ",sat_global.shape)
+            # print("grd_global : ",grd_global.shape)
 
             fake_sat_global = torch.matmul(sat_x, fake_sat_sa).view(sat_x.shape[0], -1)
             fake_grd_global = torch.matmul(grd_x, fake_grd_sa).view(grd_x.shape[0], -1)
@@ -210,10 +219,14 @@ def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=
 #     loss = (loss_s2p + loss_p2s) / 2.0
 #     return loss
 
-def CFLoss(vecs, hat_vecs, loss_weight=20):
-    loss = F.cosine_similarity(vecs, hat_vecs)
-    
-    loss = torch.log(1 + torch.exp(loss_weight * loss))
+def CFLoss(vecs, hat_vecs, loss_weight=5.0):
+    # loss = F.cosine_similarity(vecs, hat_vecs)
+    # loss = torch.log(1 + torch.exp(loss_weight * loss))
+    # loss = loss.sum() / vecs.shape[0]
+
+    dists = 2 * torch.matmul(vecs, hat_vecs.permute(1, 0)) - 2 
+    cf_dists = torch.diag(dists)
+    loss = torch.log(1.0 + torch.exp(loss_weight * cf_dists))
 
     loss = loss.sum() / vecs.shape[0]
 
@@ -248,9 +261,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=100, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
-    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='amd_test', help='name of the model at the end')
+    parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
+    parser.add_argument("--save_suffix", type=str, default='amd_TR', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
+    parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument('--cf', default=False, action='store_true')
@@ -262,7 +276,7 @@ if __name__ == "__main__":
     batch_size = opt.batch_size
     number_of_epoch = opt.epochs
     learning_rate = opt.lr
-    number_SAFA_heads = 8
+    number_SAFA_heads = opt.SAFA_heads
     gamma = 10.0
     is_cf = opt.cf
     dataset_name = "CVUSA"
@@ -290,12 +304,18 @@ if __name__ == "__main__":
     validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sate, mode="val", zooms=[20]),\
          batch_size=batch_size, shuffle=True, num_workers=8)
 
-    model = SAFA_vgg(n_heads=number_SAFA_heads)
+    if opt.model == "SAFA_vgg":
+        model = SAFA_vgg(n_heads = number_SAFA_heads)
+    elif opt.model == "SAFA_TR":
+        model = SAFA_TR(n_heads = number_SAFA_heads)
+    else:
+        raise RuntimeError(f"model {opt.model} is not implemented")
     model = nn.DataParallel(model)
     model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-6)
-    lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 20).step)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 0).step)
+    lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
 
     print("start training...")
 
