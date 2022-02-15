@@ -7,10 +7,9 @@ import math
 
 class PositionalEncoding(nn.Module):
 
-    def __init__(self, d_model = 256, dropout = 0.1, max_len = 256):
+    def __init__(self, d_model = 256, max_len = 550):
         super().__init__()
-        self.dropout = nn.Dropout(p=dropout)
-
+        self.dr = torch.nn.Dropout(p=0.2)
         position = torch.arange(max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
         pe = torch.zeros(max_len, 1, d_model)
@@ -20,13 +19,13 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         x = x + self.pe[:x.size(0)]
-        return self.dropout(x)
+        return self.dr(x)
 
 class Transformer(nn.Module):
 
-    def __init__(self, d_model=256, nhead=4, nlayers=2, dropout = 0.3, d_hid=512):
+    def __init__(self, d_model=256, nhead=4, nlayers=2, dropout = 0.3, d_hid=1024):
         super().__init__()
-        self.pos_encoder = PositionalEncoding(d_model, dropout)
+        self.pos_encoder = PositionalEncoding(d_model)
         encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, batch_first=True)
         self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
         self.d_model = d_model
@@ -55,6 +54,7 @@ class SA(nn.Module):
         hid_dim = in_dim // 2
         self.w1, self.b1 = self.init_weights_(in_dim, hid_dim, num)
         self.w2, self.b2 = self.init_weights_(hid_dim, in_dim, num)
+        self.tr = Transformer(d_model=hid_dim)
 
     def init_weights_(self, din, dout, dnum):
         weight = torch.empty(din, dout, dnum)
@@ -68,6 +68,9 @@ class SA(nn.Module):
     def forward(self, x):
         mask, _ = x.max(1)
         mask = torch.einsum('bi, ijd -> bjd', mask, self.w1) + self.b1
+        mask = mask.permute(0,2,1)
+        mask = self.tr(mask)
+        mask = mask.permute(0,2,1)
         mask = torch.einsum('bjd, jid -> bid', mask, self.w2) + self.b2
         return mask
 
@@ -110,11 +113,8 @@ class SAFA_TR(nn.Module):
         self.backbone_grd = ResNet34()
         self.backbone_sat = ResNet34()
 
-        self.spatial_aware_grd = SA(in_dim=1078, num=n_heads)
+        self.spatial_aware_grd = SA(in_dim=1344, num=n_heads)
         self.spatial_aware_sat = SA(in_dim=1024, num=n_heads)
-
-        self.sat_tr = Transformer()
-        self.grd_tr = Transformer()
 
         self.tanh = nn.Tanh()
 
@@ -135,31 +135,22 @@ class SAFA_TR(nn.Module):
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1, 1)
             fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1, 1)
 
-            sat_global = torch.matmul(sat_x, sat_sa).permute(0, 2, 1)
-            grd_global = torch.matmul(grd_x, grd_sa).permute(0, 2, 1)
-
-            sat_global = self.sat_tr(sat_global).view(b, -1)
-            grd_global = self.grd_tr(grd_global).view(b, -1)
+            sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
+            grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
 
             sat_global = F.normalize(sat_global, p=2, dim=1)
             grd_global = F.normalize(grd_global, p=2, dim=1)
 
-            fake_sat_global = torch.matmul(sat_x, fake_sat_sa).permute(0, 2, 1)
-            fake_grd_global = torch.matmul(grd_x, fake_grd_sa).permute(0, 2, 1)
-
-            fake_sat_global = self.sat_tr(fake_sat_global).view(b, -1)
-            fake_grd_global = self.grd_tr(fake_grd_global).view(b, -1)
+            fake_sat_global = torch.matmul(sat_x, fake_sat_sa).view(b,-1)
+            fake_grd_global = torch.matmul(grd_x, fake_grd_sa).view(b,-1)
 
             fake_sat_global = F.normalize(fake_sat_global, p=2, dim=1)
             fake_grd_global = F.normalize(fake_grd_global, p=2, dim=1)
 
             return sat_global, grd_global, fake_sat_global, fake_grd_global
         else:
-            sat_global = torch.matmul(sat_x, sat_sa).permute(0, 2, 1)
-            grd_global = torch.matmul(grd_x, grd_sa).permute(0, 2, 1)
-
-            sat_global = self.sat_tr(sat_global).view(b, -1)
-            grd_global = self.grd_tr(grd_global).view(b, -1)
+            sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
+            grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
 
             sat_global = F.normalize(sat_global, p=2, dim=1)
             grd_global = F.normalize(grd_global, p=2, dim=1)
@@ -169,7 +160,7 @@ class SAFA_TR(nn.Module):
 if __name__ == "__main__":
     model = SAFA_TR(n_heads = 16)
     sat = torch.randn(5, 3, 256, 256)
-    grd = torch.randn(5, 3, 112, 616)
-    result = model(sat, grd, False)
+    grd = torch.randn(5, 3, 122, 671)
+    result = model(sat, grd, True)
     for i in result:
         print(i.shape)

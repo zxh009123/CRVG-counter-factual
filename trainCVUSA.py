@@ -17,10 +17,13 @@ import torch.nn as nn
 from torchvision import models
 from SAFA_TR import SAFA_TR
 
-STREET_IMG_WIDTH = 616
-STREET_IMG_HEIGHT = 112
+# STREET_IMG_WIDTH = 616
+# STREET_IMG_HEIGHT = 112
 SATELLITE_IMG_WIDTH = 256
 SATELLITE_IMG_HEIGHT = 256
+
+STREET_IMG_WIDTH = 671
+STREET_IMG_HEIGHT = 122
 
 
 class ResNet34(nn.Module):
@@ -95,7 +98,7 @@ class SAFA_vgg(nn.Module):
         self.backbone_grd = ResNet34()
         self.backbone_sat = ResNet34()
 
-        self.spatial_aware_grd = SA(in_dim=1078, num=n_heads)
+        self.spatial_aware_grd = SA(in_dim=1344, num=n_heads)
         self.spatial_aware_sat = SA(in_dim=1024, num=n_heads)
 
         self.tanh = nn.Tanh()
@@ -140,15 +143,21 @@ class SAFA_vgg(nn.Module):
 
             return sat_global, grd_global
 
+class WarmUpGamma():
+    def __init__(self, n_epochs, warm_up_epoch, gamma=0.95):
+        assert ((n_epochs - warm_up_epoch) > 0), "Decay must start before the training session ends!"
+        self.n_epochs = n_epochs
+        self.warm_up_epoch = warm_up_epoch
+        self.gamma = gamma
+
+    def step(self, epoch):
+        if epoch <= self.warm_up_epoch:
+            return float(epoch**2 / self.warm_up_epoch**2)
+        else:
+            return self.gamma ** (epoch - self.warm_up_epoch)
 
 class LambdaLR():
     def __init__(self, n_epochs, offset, decay_start_epoch):
-        '''
-        linear decay LR scheduler
-        n_epochs: number of total training epochs
-        offset: train start epochs
-        decay_start_epoch: epoch start decay
-        '''
         assert ((n_epochs - decay_start_epoch) > 0), "Decay must start before the training session ends!"
         self.n_epochs = n_epochs
         self.offset = offset
@@ -259,10 +268,10 @@ def ValidateAll(streetFeatures, satelliteFeatures):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=100, help="number of epochs of training")
+    parser.add_argument("--epochs", type=int, default=150, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
-    parser.add_argument("--lr", type=float, default=1e-5, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='amd_TR', help='name of the model at the end')
+    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--save_suffix", type=str, default='test_all', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
@@ -281,27 +290,41 @@ if __name__ == "__main__":
     is_cf = opt.cf
     dataset_name = "CVUSA"
 
-    save_name = f"{dataset_name}_{opt.lr}_{is_cf}_{opt.alpha}_{number_SAFA_heads}_{batch_size}_{opt.save_suffix}"
+    save_name = f"{opt.model}_{opt.lr}_{is_cf}_{opt.alpha}_{number_SAFA_heads}_{batch_size}_{opt.save_suffix}"
     if not os.path.exists(save_name):
         os.makedirs(save_name)
     else:
         print("Note! Saving path existed !")
     writer = SummaryWriter(save_name)
 
-    transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
+    val_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
                     transforms.ToTensor(),
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
-    transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
+    val_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
                     transforms.ToTensor(),
+                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+                    ]
+
+    train_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH + 14, SATELLITE_IMG_HEIGHT + 14)),
+                    transforms.ColorJitter(0.1, 0.1, 0.1),
+                    transforms.RandomResizedCrop([SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT], scale=(0.9, 1.0), ratio=(1.0, 1.0)),
+                    transforms.ToTensor(),
+                    transforms.RandomErasing(),
+                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+                    ]
+    train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
+                    transforms.ColorJitter(0.1, 0.1, 0.1),
+                    transforms.ToTensor(),
+                    transforms.RandomErasing(),
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sate, mode="train", zooms=[20]),\
+    dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", zooms=[20]),\
          batch_size=batch_size, shuffle=True, num_workers=8)
 
-    validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sate, mode="val", zooms=[20]),\
+    validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", zooms=[20]),\
          batch_size=batch_size, shuffle=True, num_workers=8)
 
     if opt.model == "SAFA_vgg":
@@ -313,9 +336,16 @@ if __name__ == "__main__":
     model = nn.DataParallel(model)
     model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    if opt.model == "SAFA_vgg":
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-6)
+        lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
+    elif opt.model == "SAFA_TR":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.03, eps=1e-6)
+        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.96).step)
+    else:
+        raise RuntimeError("configs not implemented")
     # lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 0).step)
-    lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
+    # lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
 
     print("start training...")
 
@@ -357,6 +387,9 @@ if __name__ == "__main__":
                 epoch_loss += loss.item()
                 # print(loss)
                 # print("============")
+
+            if opt.model == "SAFA_TR":
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
