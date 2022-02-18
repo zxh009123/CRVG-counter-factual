@@ -9,7 +9,7 @@ class PositionalEncoding(nn.Module):
 
     def __init__(self, d_model = 256, max_len = 550):
         super().__init__()
-        self.dr = torch.nn.Dropout(p=0.2)
+        self.dr = torch.nn.Dropout(p=0.05)
         position = torch.arange(max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
         pe = torch.zeros(max_len, 1, d_model)
@@ -23,12 +23,12 @@ class PositionalEncoding(nn.Module):
 
 class Transformer(nn.Module):
 
-    def __init__(self, d_model=256, nhead=4, nlayers=2, dropout = 0.3, d_hid=1024):
+    def __init__(self, d_model=256, nhead=4, nlayers=2, dropout = 0.2, d_hid=512):
         super().__init__()
         self.pos_encoder = PositionalEncoding(d_model)
-        encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, batch_first=True)
-        self.transformer_encoder = TransformerEncoder(encoder_layers, nlayers)
-        self.d_model = d_model
+        encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
+        layer_norm = nn.LayerNorm(d_model)
+        self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = nlayers, norm=layer_norm)
 
 
     def forward(self, src):
@@ -57,9 +57,11 @@ class SA(nn.Module):
         self.tr = Transformer(d_model=hid_dim)
 
     def init_weights_(self, din, dout, dnum):
-        weight = torch.empty(din, dout, dnum)
+        # weight = torch.empty(din, dout, dnum)
+        weight = torch.empty(din, dnum, dout)
         nn.init.normal_(weight, mean=0.0, std=0.005)
-        bias = torch.empty(1, dout, dnum)
+        # bias = torch.empty(1, dout, dnum)
+        bias = torch.empty(1, dnum, dout)
         nn.init.constant_(bias, val=0.1)
         weight = torch.nn.Parameter(weight)
         bias = torch.nn.Parameter(bias)
@@ -67,11 +69,13 @@ class SA(nn.Module):
 
     def forward(self, x):
         mask, _ = x.max(1)
-        mask = torch.einsum('bi, ijd -> bjd', mask, self.w1) + self.b1
-        mask = mask.permute(0,2,1)
+        mask = torch.einsum('bi, idj -> bdj', mask, self.w1) + self.b1
+        # mask = mask.permute(0,2,1)
         mask = self.tr(mask)
+        # mask = mask.permute(0,2,1)
+        mask = torch.einsum('bdj, jdi -> bdi', mask, self.w2) + self.b2
         mask = mask.permute(0,2,1)
-        mask = torch.einsum('bjd, jid -> bid', mask, self.w2) + self.b2
+        # print("mask : ", mask.shape)
         return mask
 
 class SAFA_TR(nn.Module):
@@ -116,8 +120,6 @@ class SAFA_TR(nn.Module):
         self.spatial_aware_grd = SA(in_dim=1344, num=n_heads)
         self.spatial_aware_sat = SA(in_dim=1024, num=n_heads)
 
-        self.tanh = nn.Tanh()
-
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
 
@@ -125,12 +127,12 @@ class SAFA_TR(nn.Module):
         grd_x = self.backbone_grd(grd)
         # print("sat_x : ",sat_x.shape)
         # print("grd_x : ",grd_x.shape)
-        sat_x = sat_x.view(b, sat_x.shape[1],-1)
-        grd_x = grd_x.view(b, grd_x.shape[1],-1)
+        sat_x = sat_x.view(b, sat_x.shape[1], -1)
+        grd_x = grd_x.view(b, grd_x.shape[1], -1)
         sat_sa = self.spatial_aware_sat(sat_x)
         grd_sa = self.spatial_aware_grd(grd_x)
-        sat_sa = self.tanh(sat_sa)
-        grd_sa = self.tanh(grd_sa)
+        sat_sa = F.hardtanh(sat_sa)
+        grd_sa = F.hardtanh(grd_sa)
         if is_cf:
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1, 1)
             fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1, 1)

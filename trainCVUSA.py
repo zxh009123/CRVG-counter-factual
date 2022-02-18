@@ -16,6 +16,7 @@ import argparse
 import torch.nn as nn
 from torchvision import models
 from SAFA_TR import SAFA_TR
+from BAP import SCN_ResNet
 
 # STREET_IMG_WIDTH = 616
 # STREET_IMG_HEIGHT = 112
@@ -152,7 +153,7 @@ class WarmUpGamma():
 
     def step(self, epoch):
         if epoch <= self.warm_up_epoch:
-            return float(epoch**2 / self.warm_up_epoch**2)
+            return float(epoch / self.warm_up_epoch)
         else:
             return self.gamma ** (epoch - self.warm_up_epoch)
 
@@ -270,7 +271,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=150, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
-    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
     parser.add_argument("--save_suffix", type=str, default='test_all', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
@@ -306,19 +307,30 @@ if __name__ == "__main__":
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
 
-    train_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH + 14, SATELLITE_IMG_HEIGHT + 14)),
-                    transforms.ColorJitter(0.1, 0.1, 0.1),
-                    transforms.RandomResizedCrop([SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT], scale=(0.9, 1.0), ratio=(1.0, 1.0)),
-                    transforms.ToTensor(),
-                    transforms.RandomErasing(),
-                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                    ]
-    train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                    transforms.ColorJitter(0.1, 0.1, 0.1),
-                    transforms.ToTensor(),
-                    transforms.RandomErasing(),
-                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                    ]
+    if opt.model == "SAFA_TR":
+        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH + 14, SATELLITE_IMG_HEIGHT + 14)),
+                        transforms.ColorJitter(0.1, 0.1, 0.1),
+                        transforms.RandomResizedCrop([SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT], scale=(0.95, 1.0), ratio=(1.0, 1.0)),
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+                        ]
+        train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
+                        transforms.ColorJitter(0.1, 0.1, 0.1),
+                        transforms.ToTensor(),
+                        transforms.RandomErasing(),
+                        transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+                        ]
+    else:
+        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
+                        transforms.ColorJitter(0.1, 0.1, 0.1),
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+                        ]
+        train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
+                        transforms.ColorJitter(0.1, 0.1, 0.1),
+                        transforms.ToTensor(),
+                        transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+                        ]
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", zooms=[20]),\
@@ -331,6 +343,8 @@ if __name__ == "__main__":
         model = SAFA_vgg(n_heads = number_SAFA_heads)
     elif opt.model == "SAFA_TR":
         model = SAFA_TR(n_heads = number_SAFA_heads)
+    elif opt.model == "SCN_ResNet":
+        model = SCN_ResNet()
     else:
         raise RuntimeError(f"model {opt.model} is not implemented")
     model = nn.DataParallel(model)
@@ -339,9 +353,13 @@ if __name__ == "__main__":
     if opt.model == "SAFA_vgg":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-6)
         lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
+    elif opt.model == "SCN_ResNet":
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-6)
+        # lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
+        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 30).step)
     elif opt.model == "SAFA_TR":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.03, eps=1e-6)
-        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.96).step)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.01, eps=1e-6)
+        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.95).step)
     else:
         raise RuntimeError("configs not implemented")
     # lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 0).step)
@@ -362,7 +380,7 @@ if __name__ == "__main__":
             # sat = sat.reshape(sat.shape[0], sat.shape[2], sat.shape[3], sat.shape[4])
             grd = batch['ground'].to(device)
             # grd = batch['street'][:,batch['street'].shape[1] // 2]
-            grd = grd.to(device)
+            # grd = grd.to(device)
 
             if is_cf:
                 sat_global, grd_global, fake_sat_global, fake_grd_global = model(sat, grd, is_cf)
@@ -388,10 +406,10 @@ if __name__ == "__main__":
                 # print(loss)
                 # print("============")
 
-            if opt.model == "SAFA_TR":
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.zero_grad()
             loss.backward()
+            if opt.model == "SAFA_TR":
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
         lrSchedule.step()
@@ -423,7 +441,6 @@ if __name__ == "__main__":
                 # sat = sat.reshape(sat.shape[0], sat.shape[2], sat.shape[3], sat.shape[4])
                 grd = batch['ground'].to(device)
                 # grd = batch['street'][:,batch['street'].shape[1] // 2]
-                grd = grd.to(device)
 
                 sat_global, grd_global = model(sat, grd, is_cf=False)
                 sat_global = F.normalize(sat_global)

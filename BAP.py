@@ -166,11 +166,10 @@ class BN2d(nn.Module):
 class Baseline(nn.Module):
     in_planes = 2048
 
-    def __init__(self, last_stride=1, using_cal=True):
+    def __init__(self, last_stride=1):
         super(Baseline, self).__init__()
-        self.using_cal = using_cal
         self.base = ResNet(last_stride)
-        # self.base.load_param(model_path)
+        self.base.load_param("/mnt/resnet50.pth")
         self.radix = 2
         self.base_1 = nn.Sequential(*list(self.base.children())[0:3])
         self.BN1 = BN2d(64)
@@ -200,83 +199,97 @@ class Baseline(nn.Module):
 
         self.gap = nn.AdaptiveAvgPool2d(1)
 
-        self.bottleneck = nn.BatchNorm1d(self.in_planes)
-        self.bottleneck.bias.requires_grad_(False)  # no shift
-        self.bottleneck.apply(weights_init_kaiming)
-
 
         self.classifier_bap = nn.Linear(self.in_planes*self.M, self.in_planes, bias=False)
 
         self.classifier_bap.apply(weights_init_classifier)
 
         
-    def forward(self, x):
+    def forward(self, x, is_cf):
 
         ############
-        # x_1 = self.base_1(x)
-        # x_1 = self.att_s1(x_1)
-        # x_1 = self.BN1(x_1)
-        # y_1 = self.att1(x_1)
-        # x_att1=x_1*y_1.expand_as(x_1)
+        x_1 = self.base_1(x)
+        x_1 = self.att_s1(x_1)
+        x_1 = self.BN1(x_1)
+        y_1 = self.att1(x_1)
+        x_att1=x_1*y_1.expand_as(x_1)
 
 
-        # x_2 = self.base_2(x_att1)
-        # x_2 = self.att_s2(x_2)
-        # x_2 = self.BN2(x_2)
-        # y_2 = self.att2(x_2)
-        # x_att2=x_2*y_2.expand_as(x_2)
+        x_2 = self.base_2(x_att1)
+        x_2 = self.att_s2(x_2)
+        x_2 = self.BN2(x_2)
+        y_2 = self.att2(x_2)
+        x_att2=x_2*y_2.expand_as(x_2)
 
-        # x_3 = self.base_3(x_att2)
-        # x_3 = self.att_s3(x_3)
-        # x_3 = self.BN3(x_3)
-        # y_3 = self.att3(x_3)
-        # x_att3=x_3*y_3.expand_as(x_3)
+        x_3 = self.base_3(x_att2)
+        x_3 = self.att_s3(x_3)
+        x_3 = self.BN3(x_3)
+        y_3 = self.att3(x_3)
+        x_att3=x_3*y_3.expand_as(x_3)
 
-        # x_4 = self.base_4(x_att3)
-        # x_4 = self.att_s4(x_4)
-        # x_4 = self.BN4(x_4)
-        # y_4 = self.att4(x_4)
-        # x_att4=x_4*y_4.expand_as(x_4)
+        x_4 = self.base_4(x_att3)
+        x_4 = self.att_s4(x_4)
+        x_4 = self.BN4(x_4)
+        y_4 = self.att4(x_4)
+        x_att4=x_4*y_4.expand_as(x_4)
 
-        # x_5 = self.base_5(x_att4)
-        # x_5 = self.att_s5(x_5)
-        # x_5 = self.BN5(x_5)
-        # y_5 = self.att5(x_5)
-        # x=x_5*y_5.expand_as(x_5) 
+        x_5 = self.base_5(x_att4)
+        x_5 = self.att_s5(x_5)
+        x_5 = self.BN5(x_5)
+        y_5 = self.att5(x_5)
+        x=x_5*y_5.expand_as(x_5) 
         ############
 
-        x = self.base(x) #replace above with this to use base network
+        # x = self.base(x) #replace above with this to use base network
 
         attention_maps = self.attentions(x)
 
         # print(x.shape)
         # print(attention_maps.shape)
 
-        global_feat,global_feat_hat = self.bap(x, attention_maps,counterfactual=True)
 
-        global_feat = global_feat.view(global_feat.shape[0], -1)
-        global_feat_hat = global_feat_hat.view(global_feat.shape[0], -1)
+        if is_cf:
+            global_feat,global_feat_hat = self.bap(x, attention_maps,counterfactual=True)
 
-        global_feat = self.classifier_bap(global_feat)
-        global_feat_hat = self.classifier_bap(global_feat_hat)
-        print(global_feat.shape)
-        print(global_feat_hat.shape)
-      
-        
-        feat_hat = self.bottleneck(global_feat_hat)
-        feat = self.bottleneck(global_feat)  # normalize for angular softmax
+            global_feat = global_feat.view(global_feat.shape[0], -1)
+            global_feat_hat = global_feat_hat.view(global_feat.shape[0], -1)
 
-
-        if self.training:
-            if self.using_cal:    
-                return global_feat, global_feat_hat  # global feature for triplet loss
-            else:
-                return global_feat
+            global_feat = self.classifier_bap(global_feat)
+            global_feat_hat = self.classifier_bap(global_feat_hat)
+            
+            global_feat = F.normalize(global_feat, p=2, dim=1)
+            global_feat_hat = F.normalize(global_feat_hat, p=2, dim=1)
+            return global_feat, global_feat_hat  # global feature for triplet loss
         else:
+            global_feat = self.bap(x, attention_maps,counterfactual=False)
+
+            global_feat = global_feat.view(global_feat.shape[0], -1)
+
+            global_feat = self.classifier_bap(global_feat)       
+            global_feat = F.normalize(global_feat, p=2, dim=1)
             return global_feat
 
+class SCN_ResNet(nn.Module):
+
+    def __init__(self, last_stride=1):
+        super(SCN_ResNet, self).__init__()
+        self.grd_feature_extractor = Baseline()
+        self.sat_feature_extractor = Baseline()
+    def forward(self, grd, sat, is_cf):
+        if is_cf:
+            grd_global, grd_global_hat = self.grd_feature_extractor(grd, is_cf)
+            sat_global, sat_global_hat = self.grd_feature_extractor(sat, is_cf)
+            return sat_global, grd_global, sat_global_hat, grd_global_hat
+        else:
+            grd_global = self.grd_feature_extractor(grd, is_cf)
+            sat_global = self.grd_feature_extractor(sat, is_cf)
+            return sat_global, grd_global
+
+
 if __name__ == "__main__":
-    model = Baseline()
+    model = SCN_ResNet()
     sat = torch.randn(5, 3, 256, 256)
     grd = torch.randn(5, 3, 122, 671)
-    result = model(sat)
+    result = model(sat, grd, False)
+    for i in result:
+        print(i.shape)
