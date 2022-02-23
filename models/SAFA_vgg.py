@@ -39,7 +39,7 @@ class SA(nn.Module):
         return mask
 
 class SAFA_vgg(nn.Module):
-    def __init__(self, n_heads = 1):
+    def __init__(self, safa_heads = 1):
         super().__init__()
         # self.backbone_grd = models.vgg16(pretrained=True)
         # self.backbone_sat = models.vgg16(pretrained=True)
@@ -70,15 +70,15 @@ class SAFA_vgg(nn.Module):
         # modules = modules[:len(modules) - 2]
         # self.backbone_sat = nn.Sequential(*modules)
 
-        # self.spatial_aware_grd = SA(in_dim=266, num=n_heads)
-        # self.spatial_aware_sat = SA(in_dim=256, num=n_heads)
+        # self.spatial_aware_grd = SA(in_dim=266, num=safa_heads)
+        # self.spatial_aware_sat = SA(in_dim=256, num=safa_heads)
 
 
         self.backbone_grd = ResNet34()
         self.backbone_sat = ResNet34()
 
-        self.spatial_aware_grd = SA(in_dim=1344, num=n_heads)
-        self.spatial_aware_sat = SA(in_dim=1024, num=n_heads)
+        self.spatial_aware_grd = SA(in_dim=1344, num=safa_heads)
+        self.spatial_aware_sat = SA(in_dim=1024, num=safa_heads)
 
         self.tanh = nn.Tanh()
 

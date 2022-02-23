@@ -16,6 +16,7 @@ import argparse
 import logging
 import calendar
 import time
+import json
 
 from models.SAFA_TR import SAFA_TR
 from models.BAP import SCN_ResNet
@@ -37,12 +38,15 @@ if __name__ == "__main__":
     parser.add_argument("--save_suffix", type=str, default='test_reorg', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
-    parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
+    parser.add_argument("--SAFA_heads", type=int, default=16, help='number of SAFA heads')
+    parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
+    parser.add_argument("--TR_layers", type=int, default=6, help='number of layers in Transformer')
+    parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
+    parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument('--cf', default=False, action='store_true')
-    parser.add_argument('--verbose', default=False, action='store_true')
+    parser.add_argument('--verbose', default=True, action='store_false')
     opt = parser.parse_args()
-    print(opt)
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
@@ -55,15 +59,26 @@ if __name__ == "__main__":
     is_cf = opt.cf
     dataset_name = "CVUSA"
 
+    hyper_parameter_dict = vars(opt)
+    
+    logger.info("Configuration:")
+    for k, v in hyper_parameter_dict.items():
+        print(f"{k} : {v}")
+
     # generate time stamp
     gmt = time.gmtime()
     ts = calendar.timegm(gmt)
 
     save_name = f"{ts}_{opt.model}_{dataset_name}_{is_cf}_{opt.save_suffix}"
+    print("save_name : ", save_name)
     if not os.path.exists(save_name):
         os.makedirs(save_name)
     else:
         logger.info("Note! Saving path existed !")
+
+    with open(os.path.join(save_name,f"{ts}_parameter.json"), "w") as outfile:
+        json.dump(hyper_parameter_dict, outfile, indent=4)
+
     writer = SummaryWriter(save_name)
 
     val_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
@@ -112,9 +127,9 @@ if __name__ == "__main__":
          batch_size=batch_size, shuffle=True, num_workers=8)
 
     if opt.model == "SAFA_vgg":
-        model = SAFA_vgg(n_heads = number_SAFA_heads)
+        model = SAFA_vgg(safa_heads = number_SAFA_heads)
     elif opt.model == "SAFA_TR":
-        model = SAFA_TR(n_heads = number_SAFA_heads)
+        model = SAFA_TR(safa_heads=opt.SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim)
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
@@ -145,7 +160,7 @@ if __name__ == "__main__":
         else:
             epoch_loss = 0
         model.train() # set model to train
-        for batch in tqdm(dataloader, disable=opt.verbose):
+        for batch in tqdm(dataloader, disable = opt.verbose):
             sat = batch['satellite'].to(device)
             grd = batch['ground'].to(device)
 
@@ -201,7 +216,7 @@ if __name__ == "__main__":
 
         model.eval()
         with torch.no_grad():
-            for batch in tqdm(validateloader, disable=opt.verbose):
+            for batch in tqdm(validateloader, disable = opt.verbose):
                 sat = batch['satellite'].to(device)
                 grd = batch['ground'].to(device)
 

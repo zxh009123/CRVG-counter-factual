@@ -7,9 +7,9 @@ import math
 
 class PositionalEncoding(nn.Module):
 
-    def __init__(self, d_model = 256, max_len = 16):
+    def __init__(self, d_model = 256, max_len = 16, dropout=0.3):
         super().__init__()
-        self.dr = torch.nn.Dropout(p=0.3)
+        self.dr = torch.nn.Dropout(p=dropout)
         position = torch.arange(max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
         pe = torch.zeros(1, max_len, d_model)#batch first
@@ -27,9 +27,11 @@ class PositionalEncoding(nn.Module):
 
 class Transformer(nn.Module):
 
-    def __init__(self, d_model=256, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
+    def __init__(self, d_model=256, safa_heads = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
-        self.pos_encoder = PositionalEncoding(d_model)
+
+
+        self.pos_encoder = PositionalEncoding(d_model, max_len=safa_heads, dropout=dropout)
         encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
         layer_norm = nn.LayerNorm(d_model)
         self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = nlayers, norm=layer_norm)
@@ -53,12 +55,13 @@ class ResNet34(nn.Module):
         return self.layers(x)
 
 class SA(nn.Module):
-    def __init__(self, in_dim, num=8):
+    def __init__(self, in_dim, safa_heads=8, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
+
         hid_dim = in_dim // 2
-        self.w1, self.b1 = self.init_weights_(in_dim, hid_dim, num)
-        self.w2, self.b2 = self.init_weights_(hid_dim, in_dim, num)
-        self.tr = Transformer(d_model=hid_dim)
+        self.w1, self.b1 = self.init_weights_(in_dim, hid_dim, safa_heads)
+        self.w2, self.b2 = self.init_weights_(hid_dim, in_dim, safa_heads)
+        self.tr = Transformer(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
 
     def init_weights_(self, din, dout, dnum):
         # weight = torch.empty(din, dout, dnum)
@@ -84,7 +87,7 @@ class SA(nn.Module):
         return mask
 
 class SAFA_TR(nn.Module):
-    def __init__(self, n_heads = 1):
+    def __init__(self, safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
         # self.backbone_grd = models.vgg16(pretrained=True)
         # self.backbone_sat = models.vgg16(pretrained=True)
@@ -115,23 +118,21 @@ class SAFA_TR(nn.Module):
         # modules = modules[:len(modules) - 2]
         # self.backbone_sat = nn.Sequential(*modules)
 
-        # self.spatial_aware_grd = SA(in_dim=266, num=n_heads)
-        # self.spatial_aware_sat = SA(in_dim=256, num=n_heads)
+        # self.spatial_aware_grd = SA(in_dim=266, num=safa_heads)
+        # self.spatial_aware_sat = SA(in_dim=256, num=safa_heads)
 
-        self.n_heads = n_heads
         self.backbone_grd = ResNet34()
         self.backbone_sat = ResNet34()
 
-        self.spatial_aware_grd = SA(in_dim=1344, num=n_heads)
-        self.spatial_aware_sat = SA(in_dim=1024, num=n_heads)
+        self.spatial_aware_grd = SA(in_dim=1344, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+        self.spatial_aware_sat = SA(in_dim=1024, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
 
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
 
         sat_x = self.backbone_sat(sat)
         grd_x = self.backbone_grd(grd)
-        # print("sat_x : ",sat_x.shape)
-        # print("grd_x : ",grd_x.shape)
+
         sat_x = sat_x.view(b, sat_x.shape[1], -1)
         grd_x = grd_x.view(b, grd_x.shape[1], -1)
         sat_sa = self.spatial_aware_sat(sat_x)
@@ -165,7 +166,7 @@ class SAFA_TR(nn.Module):
             return sat_global, grd_global
 
 if __name__ == "__main__":
-    model = SAFA_TR(n_heads = 16)
+    model = SAFA_TR(safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048)
     sat = torch.randn(5, 3, 256, 256)
     grd = torch.randn(5, 3, 122, 671)
     result = model(sat, grd, True)
