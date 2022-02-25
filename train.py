@@ -24,18 +24,12 @@ from models.SAFA_vgg import SAFA_vgg
 
 from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss, CFLoss, save_model, ValidateAll
 
-SATELLITE_IMG_WIDTH = 256
-SATELLITE_IMG_HEIGHT = 256
-
-STREET_IMG_WIDTH = 671
-STREET_IMG_HEIGHT = 122
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=150, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='test_reorg', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='test_PE_dropout', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=16, help='number of SAFA heads')
@@ -44,8 +38,9 @@ if __name__ == "__main__":
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
-    parser.add_argument('--cf', default=False, action='store_true')
-    parser.add_argument('--verbose', default=True, action='store_false')
+    parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
+    parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
+    parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     opt = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -64,12 +59,26 @@ if __name__ == "__main__":
     logger.info("Configuration:")
     for k, v in hyper_parameter_dict.items():
         print(f"{k} : {v}")
+    
+    if opt.no_polar:
+        SATELLITE_IMG_WIDTH = 256
+        SATELLITE_IMG_HEIGHT = 256
+        polar_transformation = False
+    else:
+        SATELLITE_IMG_WIDTH = 671
+        SATELLITE_IMG_HEIGHT = 122
+        polar_transformation = True
+    print("SATELLITE_IMG_WIDTH:",SATELLITE_IMG_WIDTH)
+    print("SATELLITE_IMG_HEIGHT:",SATELLITE_IMG_HEIGHT)
+
+    STREET_IMG_WIDTH = 671
+    STREET_IMG_HEIGHT = 122
 
     # generate time stamp
     gmt = time.gmtime()
     ts = calendar.timegm(gmt)
 
-    save_name = f"{ts}_{opt.model}_{dataset_name}_{is_cf}_{opt.save_suffix}"
+    save_name = f"{ts}_{opt.model}_{dataset_name}_{is_cf}_{polar_transformation}_{opt.save_suffix}"
     print("save_name : ", save_name)
     if not os.path.exists(save_name):
         os.makedirs(save_name)
@@ -91,9 +100,8 @@ if __name__ == "__main__":
                     ]
 
     if opt.model == "SAFA_TR": #TR model need strong augmentation
-        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH + 14, SATELLITE_IMG_HEIGHT + 14)),
+        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
                         transforms.ColorJitter(0.2, 0.2, 0.2),
-                        transforms.RandomResizedCrop([SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT], scale=(0.95, 1.0), ratio=(1.0, 1.0)),
                         transforms.ToTensor(),
                         transforms.RandomErasing(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
@@ -120,16 +128,17 @@ if __name__ == "__main__":
 
     #dataloader now only support CVUSA
     # TODO: add support to CVACT
-    dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train"),\
-         batch_size=batch_size, shuffle=True, num_workers=8)
 
-    validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val"),\
-         batch_size=batch_size, shuffle=True, num_workers=8)
+    dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
+        batch_size=batch_size, shuffle=True, num_workers=8)
+
+    validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
+        batch_size=batch_size, shuffle=True, num_workers=8)
 
     if opt.model == "SAFA_vgg":
-        model = SAFA_vgg(safa_heads = number_SAFA_heads)
+        model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
     elif opt.model == "SAFA_TR":
-        model = SAFA_TR(safa_heads=opt.SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim)
+        model = SAFA_TR(safa_heads=opt.SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:

@@ -11,22 +11,13 @@ import torchvision.transforms as transforms
 
 
 class TrainDataset(Dataset):
-    def __init__(self, data_dir, transforms_sat, transforms_grd):
+    def __init__(self, data_dir, transforms_sat, transforms_grd, is_polar=True):
 
         # self.polar = args.polar
 
         self.img_root = data_dir
         self.transform_sat = transforms.Compose(transforms_sat)
         self.transform_grd = transforms.Compose(transforms_grd)
-        # self.transform = transforms.Compose(
-        #     [transforms.Resize((args.img_size[0], args.img_size[1])),
-        #     transforms.ToTensor(),
-        #     transforms.Normalize(mean = (0.485, 0.456, 0.406), std = (0.229, 0.224, 0.225))] )
-        
-        # self.transform_1 = transforms.Compose(
-        #     [transforms.Resize((256, 256)),
-        #     transforms.ToTensor(),
-        #     transforms.Normalize(mean = (0.485, 0.456, 0.406), std = (0.229, 0.224, 0.225))] )
 
         self.allDataList = '/mnt/CVACT/ACT_data.mat'
 
@@ -47,8 +38,11 @@ class TrainDataset(Dataset):
             # else:
             #     grd_id_align = self.img_root + 'streetview/' + anuData['panoIds'][i] + '_grdView.jpg'
             #     sat_id_ori = self.img_root + 'satview_polish/' + anuData['panoIds'][i] + '_satView_polish.jpg'
-            grd_id_align = os.path.join(self.img_root, 'ANU_data_small', 'streetview', anuData['panoIds'][i] + '_grdView.jpg')
-            sat_id_ori = os.path.join(self.img_root, 'ANU_data_small', 'satview_polish', anuData['panoIds'][i] + '_satView_polish.jpg')
+            grd_id_align = os.path.join(self.img_root, 'ANU_data_small', 'streetview_processed', anuData['panoIds'][i] + '_grdView.png')
+            if is_polar:
+                sat_id_ori = os.path.join(self.img_root, 'ANU_data_small', 'polarmap', anuData['panoIds'][i] + '_satView_polish.png')
+            else:
+                sat_id_ori = os.path.join(self.img_root, 'ANU_data_small', 'satview_polish', anuData['panoIds'][i] + '_satView_polish.jpg')
             id_alllist.append([ grd_id_align, sat_id_ori])
             id_idx_alllist.append(idx)
             idx += 1
@@ -75,16 +69,16 @@ class TrainDataset(Dataset):
 
         
         x = Image.open(self.trainList[idx][0])
-        width, height = x.size
-        x = x.crop((0, 265, width, 265+302))
-        x = self.transform(x)
+        # width, height = x.size
+        # x = x.crop((0, 265, width, 265+302))
+        x = self.transform_sat(x)
         
         y = Image.open(self.trainList[idx][1])
         # if self.polar:
         #     y = self.transform(y)
         # else:
         #     y = self.transform_1(y)
-        y = self.transform(y)
+        y = self.transform_grd(y)
 
         # return x, y
         return {'satellite':y, 'ground':x}
@@ -94,22 +88,12 @@ class TrainDataset(Dataset):
 
 
 class TestDataset(Dataset):
-    def __init__(self, data_dir, transforms_sat, transforms_grd):
+    def __init__(self, data_dir, transforms_sat, transforms_grd, is_polar=True):
 
         # self.polar = args.polar
-
         self.img_root = data_dir
         self.transform_sat = transforms.Compose(transforms_sat)
         self.transform_grd = transforms.Compose(transforms_grd)
-        # self.transform = transforms.Compose(
-        #     [transforms.Resize((args.img_size[0], args.img_size[1])),
-        #     transforms.ToTensor(),
-        #     transforms.Normalize(mean = (0.485, 0.456, 0.406), std = (0.229, 0.224, 0.225)) ] )
-
-        # self.transform_1 = transforms.Compose(
-        #     [transforms.Resize((256, 256)),
-        #     transforms.ToTensor(),
-        #     transforms.Normalize(mean = (0.485, 0.456, 0.406), std = (0.229, 0.224, 0.225))] )
 
         self.allDataList = '/mnt/CVACT/ACT_data.mat'
 
@@ -131,8 +115,11 @@ class TestDataset(Dataset):
             # else:
             #     grd_id_align = self.img_root + 'streetview/' + anuData['panoIds'][i] + '_grdView.jpg'
             #     sat_id_ori = self.img_root + 'satview_polish/' + anuData['panoIds'][i] + '_satView_polish.jpg'
-            grd_id_align = os.path.join(self.img_root, 'ANU_data_test', 'streetview', anuData['panoIds'][i] + '_grdView.jpg')
-            sat_id_ori = os.path.join(self.img_root, 'ANU_data_test', 'satview_polish', anuData['panoIds'][i] + '_satView_polish.jpg')
+            grd_id_align = os.path.join(self.img_root, 'ANU_data_test', 'streetview_processed', anuData['panoIds'][i] + '_grdView.png')
+            if is_polar:
+                sat_id_ori = os.path.join(self.img_root, 'ANU_data_test', 'polarmap', anuData['panoIds'][i] + '_satView_polish.png')
+            else:
+                sat_id_ori = os.path.join(self.img_root, 'ANU_data_test', 'satview_polish', anuData['panoIds'][i] + '_satView_polish.jpg')
             id_alllist.append([ grd_id_align, sat_id_ori])
             id_idx_alllist.append(idx)
             idx += 1
@@ -154,8 +141,9 @@ class TestDataset(Dataset):
 
     def __getitem__(self, idx):
         x = Image.open(self.valList[idx][0])
-        width, height = x.size
-        x = x.crop((0, 265, width, 265+302))
+        # print("x",x.size)
+        # width, height = x.size
+        # x = x.crop((0, 265, width, 265+302))
         x = self.transform_grd(x)
 
         y = Image.open(self.valList[idx][1])
@@ -183,8 +171,8 @@ if __name__ == "__main__":
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
-    # dataloader = DataLoader(TrainDataset(data_dir = "/mnt/CVACT/", transforms=transforms),batch_size=32, shuffle=True, num_workers=8)
-    dataloader = DataLoader(TestDataset(data_dir = "/mnt/CVACT/", transforms_sat=transforms_sat, transforms_grd=transforms_grd),batch_size=4, shuffle=True, num_workers=8)
+    dataloader = DataLoader(TrainDataset(data_dir = "/mnt/CVACT/", transforms_sat=transforms_sat, transforms_grd=transforms_grd, is_polar=False),batch_size=32, shuffle=True, num_workers=8)
+    # dataloader = DataLoader(TestDataset(data_dir = "/mnt/CVACT/", transforms_sat=transforms_sat, transforms_grd=transforms_grd),batch_size=4, shuffle=True, num_workers=8)
 
     i = 0
     for k in dataloader:

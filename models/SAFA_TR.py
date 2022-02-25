@@ -25,6 +25,24 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.size(0)]
         return self.dr(x)
 
+class SA_PE(nn.Module):
+
+    def __init__(self, d_model = 256, max_len = 16, dropout=0.3):
+        super().__init__()
+        self.dr = torch.nn.Dropout(p=dropout)
+
+        self.linear = torch.empty(d_model*2, max_len, d_model)
+        nn.init.normal_(self.linear, mean=0.0, std=0.005)
+        self.linear = torch.nn.Parameter(self.linear)
+        self.embedding_parameter = nn.Parameter(torch.zeros(1, max_len, d_model))
+
+    def forward(self, x, pos):
+        em_pos = torch.einsum('bi, idj -> bdj', pos, self.linear)
+        em_pos = em_pos + self.embedding_parameter
+        em_pos = F.hardtanh(em_pos)
+        x = x + em_pos
+        return self.dr(x)
+
 class Transformer(nn.Module):
 
     def __init__(self, d_model=256, safa_heads = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
@@ -39,6 +57,22 @@ class Transformer(nn.Module):
 
     def forward(self, src):
         src = self.pos_encoder(src)
+        output = self.transformer_encoder(src)
+        return output
+
+class SA_TR(nn.Module):
+
+    def __init__(self, d_model=256, safa_heads = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
+        super().__init__()
+
+        self.pos_encoder = SA_PE(d_model, max_len=safa_heads, dropout=0.1)
+        encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
+        layer_norm = nn.LayerNorm(d_model)
+        self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = nlayers, norm=layer_norm)
+
+
+    def forward(self, src, pos):
+        src = self.pos_encoder(src, pos)
         output = self.transformer_encoder(src)
         return output
 
@@ -61,7 +95,8 @@ class SA(nn.Module):
         hid_dim = in_dim // 2
         self.w1, self.b1 = self.init_weights_(in_dim, hid_dim, safa_heads)
         self.w2, self.b2 = self.init_weights_(hid_dim, in_dim, safa_heads)
-        self.tr = Transformer(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
+        # self.safa_tr = Transformer(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
+        self.safa_tr = SA_TR(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
 
     def init_weights_(self, din, dout, dnum):
         # weight = torch.empty(din, dout, dnum)
@@ -75,19 +110,23 @@ class SA(nn.Module):
         return weight, bias
 
     def forward(self, x):
-        mask, _ = x.max(1)
-        # print("mask", mask.shape)
+        channel = x.shape[1]
+        mask, pos = x.max(1)
+
+        pos_normalized = pos / channel
+
         mask = torch.einsum('bi, idj -> bdj', mask, self.w1) + self.b1
-        # mask = mask.permute(0,2,1)
-        mask = self.tr(mask)
-        # mask = mask.permute(0,2,1)
+
+        # mask = self.safa_tr(mask)
+        mask = self.safa_tr(mask, pos_normalized)
+
         mask = torch.einsum('bdj, jdi -> bdi', mask, self.w2) + self.b2
         mask = mask.permute(0,2,1)
-        # print("mask : ", mask.shape)
+
         return mask
 
 class SAFA_TR(nn.Module):
-    def __init__(self, safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048):
+    def __init__(self, safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True):
         super().__init__()
         # self.backbone_grd = models.vgg16(pretrained=True)
         # self.backbone_sat = models.vgg16(pretrained=True)
@@ -125,7 +164,10 @@ class SAFA_TR(nn.Module):
         self.backbone_sat = ResNet34()
 
         self.spatial_aware_grd = SA(in_dim=1344, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
-        self.spatial_aware_sat = SA(in_dim=1024, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+        if is_polar:
+            self.spatial_aware_sat = SA(in_dim=1344, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+        else:
+            self.spatial_aware_sat = SA(in_dim=1024, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
 
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
@@ -167,8 +209,14 @@ class SAFA_TR(nn.Module):
 
 if __name__ == "__main__":
     model = SAFA_TR(safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048)
-    sat = torch.randn(5, 3, 256, 256)
-    grd = torch.randn(5, 3, 122, 671)
+    sat = torch.randn(7, 3, 256, 256)
+    grd = torch.randn(7, 3, 122, 671)
     result = model(sat, grd, True)
     for i in result:
         print(i.shape)
+
+    # model = SA_PE()
+    # x = torch.rand(5, 16, 256)
+    # pos = torch.rand(5, 512)
+    # result = model(x, pos)
+

@@ -17,14 +17,6 @@ from SAFA_TR import SAFA_TR
 from BAP import SCN_ResNet
 from SAFA_vgg import SAFA_vgg
 
-# STREET_IMG_WIDTH = 616
-# STREET_IMG_HEIGHT = 112
-SATELLITE_IMG_WIDTH = 256
-SATELLITE_IMG_HEIGHT = 256
-
-STREET_IMG_WIDTH = 671
-STREET_IMG_HEIGHT = 122
-
 
 
 def ValidateOne(distArray, topK):
@@ -55,11 +47,26 @@ if __name__ == "__main__":
     parser.add_argument('--verbose', default=False, action='store_true')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument('--model_path', type=str, help='path to model weights')
+    parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     opt = parser.parse_args()
     print(opt)
 
     batch_size = opt.batch_size
     number_SAFA_heads = opt.SAFA_heads
+
+    if opt.no_polar:
+        SATELLITE_IMG_WIDTH = 256
+        SATELLITE_IMG_HEIGHT = 256
+        polar_transformation = False
+    else:
+        SATELLITE_IMG_WIDTH = 671
+        SATELLITE_IMG_HEIGHT = 122
+        polar_transformation = True
+    print("SATELLITE_IMG_WIDTH:",SATELLITE_IMG_WIDTH)
+    print("SATELLITE_IMG_HEIGHT:",SATELLITE_IMG_HEIGHT)
+
+    STREET_IMG_WIDTH = 671
+    STREET_IMG_HEIGHT = 122
 
     transforms_sat = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
                     transforms.ToTensor(),
@@ -71,14 +78,14 @@ if __name__ == "__main__":
                     ]
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-    validateloader = DataLoader(TestDataset(data_dir = opt.data_dir, transforms_sat=transforms_sat,transforms_grd=transforms_street), batch_size=batch_size, shuffle=True, num_workers=8)
-    # validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", zooms=[20]), batch_size=batch_size, shuffle=True, num_workers=8)
+    
+    # validateloader = DataLoader(TestDataset(data_dir = opt.data_dir, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
+    validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", zooms=[20], is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
 
     if opt.model == "SAFA_vgg":
-        model = SAFA_vgg(n_heads = number_SAFA_heads)
+        model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
     elif opt.model == "SAFA_TR":
-        model = SAFA_TR(n_heads = number_SAFA_heads)
+        model = SAFA_TR(safa_heads=opt.SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
