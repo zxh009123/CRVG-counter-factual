@@ -5,17 +5,17 @@ import torchvision.transforms as transforms
 from torch.optim import lr_scheduler
 import torchvision.models as models
 from torch.utils.data import DataLoader
-from dataset import ImageDataset
+from dataset.usa_dataset import ImageDataset
+from dataset.act_dataset import TestDataset, TrainDataset
 # from SMTL import softMarginTripletLoss
 from tqdm import tqdm
 import os
 import numpy as np
 import argparse
-from act_dataloader import TestDataset
 
-from SAFA_TR import SAFA_TR
-from BAP import SCN_ResNet
-from SAFA_vgg import SAFA_vgg
+from models.SAFA_TR import SAFA_TR
+from models.BAP import SCN_ResNet
+from models.SAFA_vgg import SAFA_vgg
 
 
 
@@ -48,6 +48,10 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument('--model_path', type=str, help='path to model weights')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
+    parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
+    parser.add_argument("--TR_layers", type=int, default=6, help='number of layers in Transformer')
+    parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
+    parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
     opt = parser.parse_args()
     print(opt)
 
@@ -79,8 +83,8 @@ if __name__ == "__main__":
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
-    # validateloader = DataLoader(TestDataset(data_dir = opt.data_dir, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
-    validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", zooms=[20], is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
+    validateloader = DataLoader(TestDataset(data_dir = opt.data_dir, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
+    # validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
 
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)

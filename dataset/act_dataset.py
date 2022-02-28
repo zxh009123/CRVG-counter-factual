@@ -141,17 +141,9 @@ class TestDataset(Dataset):
 
     def __getitem__(self, idx):
         x = Image.open(self.valList[idx][0])
-        # print("x",x.size)
-        # width, height = x.size
-        # x = x.crop((0, 265, width, 265+302))
         x = self.transform_grd(x)
 
         y = Image.open(self.valList[idx][1])
-        # print("y",y.size)
-        # if self.polar:
-        #     y = self.transform(y)
-        # else:
-        #     y = self.transform_1(y)
         y = self.transform_sat(y)
 
         # return x, y
@@ -161,7 +153,7 @@ class TestDataset(Dataset):
         return len(self.valList)
 
 if __name__ == "__main__":
-    transforms_sat = [transforms.Resize((256, 256)),
+    transforms_sat = [transforms.Resize((122, 671)),
                         transforms.ColorJitter(0.1, 0.1, 0.1),
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
@@ -171,8 +163,8 @@ if __name__ == "__main__":
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
-    dataloader = DataLoader(TrainDataset(data_dir = "/mnt/CVACT/", transforms_sat=transforms_sat, transforms_grd=transforms_grd, is_polar=False),batch_size=32, shuffle=True, num_workers=8)
-    # dataloader = DataLoader(TestDataset(data_dir = "/mnt/CVACT/", transforms_sat=transforms_sat, transforms_grd=transforms_grd),batch_size=4, shuffle=True, num_workers=8)
+    # dataloader = DataLoader(TrainDataset(data_dir = "/mnt/CVACT/", transforms_sat=transforms_sat, transforms_grd=transforms_grd, is_polar=False),batch_size=32, shuffle=True, num_workers=8)
+    dataloader = DataLoader(TestDataset(data_dir = "/mnt/CVACT/", transforms_sat=transforms_sat, transforms_grd=transforms_grd, is_polar=True),batch_size=4, shuffle=True, num_workers=8)
 
     i = 0
     for k in dataloader:

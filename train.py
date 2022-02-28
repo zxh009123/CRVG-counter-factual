@@ -29,18 +29,19 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=150, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='test_PE_dropout', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='low_aug095', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=16, help='number of SAFA heads')
     parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
     parser.add_argument("--TR_layers", type=int, default=6, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
-    parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
+    parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
+    parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
     opt = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -71,6 +72,12 @@ if __name__ == "__main__":
     print("SATELLITE_IMG_WIDTH:",SATELLITE_IMG_WIDTH)
     print("SATELLITE_IMG_HEIGHT:",SATELLITE_IMG_HEIGHT)
 
+    if opt.pos == "learn_pos":
+        pos = "learn_pos"
+    else:
+        pos = None
+    print("learnable positional embedding : ", pos)
+
     STREET_IMG_WIDTH = 671
     STREET_IMG_HEIGHT = 122
 
@@ -78,7 +85,7 @@ if __name__ == "__main__":
     gmt = time.gmtime()
     ts = calendar.timegm(gmt)
 
-    save_name = f"{ts}_{opt.model}_{dataset_name}_{is_cf}_{polar_transformation}_{opt.save_suffix}"
+    save_name = f"{ts}_{opt.model}_{dataset_name}_{is_cf}_{pos}_{polar_transformation}_{opt.save_suffix}"
     print("save_name : ", save_name)
     if not os.path.exists(save_name):
         os.makedirs(save_name)
@@ -101,15 +108,13 @@ if __name__ == "__main__":
 
     if opt.model == "SAFA_TR": #TR model need strong augmentation
         train_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
-                        transforms.ColorJitter(0.2, 0.2, 0.2),
+                        transforms.ColorJitter(0.1, 0.1, 0.1),
                         transforms.ToTensor(),
-                        transforms.RandomErasing(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
         train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                        transforms.ColorJitter(0.2, 0.2, 0.2),
+                        transforms.ColorJitter(0.1, 0.1, 0.1),
                         transforms.ToTensor(),
-                        transforms.RandomErasing(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
     else:
@@ -138,7 +143,7 @@ if __name__ == "__main__":
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
     elif opt.model == "SAFA_TR":
-        model = SAFA_TR(safa_heads=opt.SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
+        model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
@@ -155,7 +160,7 @@ if __name__ == "__main__":
         lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 30).step)
     elif opt.model == "SAFA_TR":
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.03, eps=1e-6)
-        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.97).step)
+        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.95).step)
     else:
         raise RuntimeError("configs not implemented")
 
