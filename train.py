@@ -22,21 +22,21 @@ from models.SAFA_TR import SAFA_TR
 from models.BAP import SCN_ResNet
 from models.SAFA_vgg import SAFA_vgg
 
-from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss, CFLoss, save_model, ValidateAll
+from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss, CFLoss, save_model, ValidateAll, WarmupCosineSchedule
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=150, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='low_aug095', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='bug_fix', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=16, help='number of SAFA heads')
     parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
     parser.add_argument("--TR_layers", type=int, default=6, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
-    parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
+    parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
@@ -72,14 +72,14 @@ if __name__ == "__main__":
     print("SATELLITE_IMG_WIDTH:",SATELLITE_IMG_WIDTH)
     print("SATELLITE_IMG_HEIGHT:",SATELLITE_IMG_HEIGHT)
 
+    STREET_IMG_WIDTH = 671
+    STREET_IMG_HEIGHT = 122
+
     if opt.pos == "learn_pos":
         pos = "learn_pos"
     else:
         pos = None
     print("learnable positional embedding : ", pos)
-
-    STREET_IMG_WIDTH = 671
-    STREET_IMG_HEIGHT = 122
 
     # generate time stamp
     gmt = time.gmtime()
@@ -97,7 +97,7 @@ if __name__ == "__main__":
 
     writer = SummaryWriter(save_name)
 
-    val_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
+    val_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
                     transforms.ToTensor(),
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
@@ -107,18 +107,18 @@ if __name__ == "__main__":
                     ]
 
     if opt.model == "SAFA_TR": #TR model need strong augmentation
-        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
-                        transforms.ColorJitter(0.1, 0.1, 0.1),
+        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
+                        transforms.ColorJitter(0.2, 0.2, 0.2),
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
         train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                        transforms.ColorJitter(0.1, 0.1, 0.1),
+                        transforms.ColorJitter(0.2, 0.2, 0.2),
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
     else:
-        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
+        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
                         transforms.ColorJitter(0.1, 0.1, 0.1),
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
@@ -160,7 +160,8 @@ if __name__ == "__main__":
         lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 30).step)
     elif opt.model == "SAFA_TR":
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.03, eps=1e-6)
-        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.95).step)
+        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.97).step)
+        # lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
     else:
         raise RuntimeError("configs not implemented")
 

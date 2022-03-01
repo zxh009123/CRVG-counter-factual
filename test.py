@@ -12,12 +12,13 @@ from tqdm import tqdm
 import os
 import numpy as np
 import argparse
+import json
 
 from models.SAFA_TR import SAFA_TR
 from models.BAP import SCN_ResNet
 from models.SAFA_vgg import SAFA_vgg
 
-
+args_do_not_overide = ['data_dir', 'verbose']
 
 def ValidateOne(distArray, topK):
     acc = 0.0
@@ -39,6 +40,21 @@ def ValidateAll(streetFeatures, satelliteFeatures):
     
     return valAcc
 
+def GetBestModel(path):
+    all_files = os.listdir(path)
+    config_files =  list(filter(lambda x: x.startswith('epoch_'), all_files))
+    config_files = sorted(list(map(lambda x: int(x.split("_")[1]), config_files)), reverse=True)
+    best_epoch = config_files[0]
+    return os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
+            
+
+def ReadConfig(path):
+    all_files = os.listdir(path)
+    config_file =  list(filter(lambda x: x.endswith('parameter.json'), all_files))
+    with open(os.path.join(path, config_file[0]), 'r') as f:
+        p = json.load(f)
+        return p
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
@@ -52,7 +68,16 @@ if __name__ == "__main__":
     parser.add_argument("--TR_layers", type=int, default=6, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
+    parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
+
     opt = parser.parse_args()
+
+    config = ReadConfig(opt.model_path)
+    for k,v in config.items():
+        if k in args_do_not_overide:
+            continue
+        setattr(opt, k, v)
+    
     print(opt)
 
     batch_size = opt.batch_size
@@ -72,7 +97,13 @@ if __name__ == "__main__":
     STREET_IMG_WIDTH = 671
     STREET_IMG_HEIGHT = 122
 
-    transforms_sat = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
+    if opt.pos == "learn_pos":
+        pos = "learn_pos"
+    else:
+        pos = None
+    print("learnable positional embedding : ", pos)
+
+    transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
                     transforms.ToTensor(),
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
@@ -89,7 +120,7 @@ if __name__ == "__main__":
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
     elif opt.model == "SAFA_TR":
-        model = SAFA_TR(safa_heads=opt.SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
+        model = SAFA_TR(safa_heads=opt.SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
@@ -97,8 +128,10 @@ if __name__ == "__main__":
     model = nn.DataParallel(model)
     model.to(device)
 
-    print("loading model")
-    model.load_state_dict(torch.load(opt.model_path))
+    best_model = GetBestModel(opt.model_path)
+    best_model = os.path.join(opt.model_path, best_model)
+    print("loading model : ", best_model)
+    model.load_state_dict(torch.load(best_model))
 
     print("start testing...")
 

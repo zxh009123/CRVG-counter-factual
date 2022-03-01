@@ -65,10 +65,10 @@ if __name__ == "__main__":
     SATELLITE_IMG_WIDTH = 671
     SATELLITE_IMG_HEIGHT = 122
 
-    transforms_sate = [transforms.Resize((SATELLITE_IMG_WIDTH, SATELLITE_IMG_HEIGHT)),
+    transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
                     transforms.ToTensor()
                     ]
-    transforms_street = [transforms.Resize((STREET_IMG_WIDTH, STREET_IMG_HEIGHT)),
+    transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
                     transforms.ToTensor()
                     ]
 
