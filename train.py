@@ -26,10 +26,10 @@ from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss, CFLoss, sa
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=150, help="number of epochs of training")
+    parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='bug_fix', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='bug_fix_cos', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=16, help='number of SAFA heads')
@@ -160,8 +160,8 @@ if __name__ == "__main__":
         lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 30).step)
     elif opt.model == "SAFA_TR":
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.03, eps=1e-6)
-        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.97).step)
-        # lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
+        # lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.97).step)
+        lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
     else:
         raise RuntimeError("configs not implemented")
 
