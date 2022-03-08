@@ -156,3 +156,5 @@ cython_debug/
 
 # local file
 data_preparation.py
+myjob*
+*.sh
