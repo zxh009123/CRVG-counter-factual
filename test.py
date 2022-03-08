@@ -128,9 +128,9 @@ if __name__ == "__main__":
     model = nn.DataParallel(model)
     model.to(device)
 
-    # best_model = GetBestModel(opt.model_path)
-    best_epoch = 101
-    best_model = os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
+    best_model = GetBestModel(opt.model_path)
+    # best_epoch = 101
+    # best_model = os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
     best_model = os.path.join(opt.model_path, best_model)
     print("loading model : ", best_model)
     model.load_state_dict(torch.load(best_model))

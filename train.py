@@ -26,7 +26,7 @@ from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss, CFLoss, sa
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
+    parser.add_argument("--epochs", type=int, default=165, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
     parser.add_argument("--save_suffix", type=str, default='bug_fix_cos', help='name of the model at the end')
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
-    parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
+    parser.add_argument("--pos", type=str, default='epoch_165', help='positional embedding')
     opt = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
