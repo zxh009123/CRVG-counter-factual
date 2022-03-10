@@ -11,8 +11,11 @@ import torchvision.transforms as transforms
 
 
 ACT_DATA_MAT_PATH = '/mnt/CVACT/ACT_data.mat'
-if os.environ["SERVER_NAME"] == "gpu02" or os.environ["SERVER_NAME"] == "gpu03" or os.environ["SERVER_NAME"] == "cluster":
-    ACT_DATA_MAT_PATH = './ACT_data.mat'
+try:
+    if os.environ["SERVER_NAME"] == "gpu02" or os.environ["SERVER_NAME"] == "gpu03" or os.environ["SERVER_NAME"] == "cluster":
+        ACT_DATA_MAT_PATH = './ACT_data.mat'
+except:
+    pass
 
 
 class TrainDataset(Dataset):
