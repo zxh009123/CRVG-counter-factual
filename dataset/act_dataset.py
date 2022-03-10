@@ -10,6 +10,11 @@ import torchvision.transforms as transforms
 # __all__ = ['TrainDataloader','TestDataloader']
 
 
+ACT_DATA_MAT_PATH = '/mnt/CVACT/ACT_data.mat'
+if os.environ["SERVER_NAME"] == "gpu02" or os.environ["SERVER_NAME"] == "gpu03" or os.environ["SERVER_NAME"] == "cluster":
+    ACT_DATA_MAT_PATH = './ACT_data.mat'
+
+
 class TrainDataset(Dataset):
     def __init__(self, data_dir, transforms_sat, transforms_grd, is_polar=True):
 
@@ -19,7 +24,7 @@ class TrainDataset(Dataset):
         self.transform_sat = transforms.Compose(transforms_sat)
         self.transform_grd = transforms.Compose(transforms_grd)
 
-        self.allDataList = '/mnt/CVACT/ACT_data.mat'
+        self.allDataList = ACT_DATA_MAT_PATH
 
         __cur_allid = 0  # for training
         id_alllist = []
@@ -95,7 +100,7 @@ class TestDataset(Dataset):
         self.transform_sat = transforms.Compose(transforms_sat)
         self.transform_grd = transforms.Compose(transforms_grd)
 
-        self.allDataList = '/mnt/CVACT/ACT_data.mat'
+        self.allDataList = ACT_DATA_MAT_PATH
 
         __cur_allid = 0  # for training
         id_alllist = []
