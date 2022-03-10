@@ -22,14 +22,24 @@ from models.SAFA_TR import SAFA_TR
 from models.BAP import SCN_ResNet
 from models.SAFA_vgg import SAFA_vgg
 
-from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss, CFLoss, save_model, ValidateAll, WarmupCosineSchedule
+from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
+     CFLoss, save_model, ValidateAll, WarmupCosineSchedule, ReadConfig
+
+args_do_not_overide = ['data_dir', 'verbose', 'resume_from']
+
+def GetBestModel(path):
+    all_files = os.listdir(path)
+    config_files =  list(filter(lambda x: x.startswith('epoch_'), all_files))
+    config_files = sorted(list(map(lambda x: int(x.split("_")[1]), config_files)), reverse=True)
+    best_epoch = config_files[0]
+    return os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='test_200', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='test_load_save', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=16, help='number of SAFA heads')
@@ -42,10 +52,23 @@ if __name__ == "__main__":
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
+    parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
+
     opt = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
+
+    # if given resume from directory read configs and overwrite
+    if opt.resume_from != 'None':
+        if os.path.isdir(opt.resume_from):
+            config = ReadConfig(opt.resume_from)
+            for k,v in config.items():
+                if k in args_do_not_overide:
+                    continue
+                setattr(opt, k, v)
+        else: # if directory invalid
+            raise RuntimeError(f'Cannot find resume model directory{opt.resume_from}')
 
     batch_size = opt.batch_size
     number_of_epoch = opt.epochs
@@ -85,15 +108,19 @@ if __name__ == "__main__":
     gmt = time.gmtime()
     ts = calendar.timegm(gmt)
 
-    save_name = f"{ts}_{opt.model}_{dataset_name}_{is_cf}_{pos}_{polar_transformation}_{opt.save_suffix}"
-    print("save_name : ", save_name)
-    if not os.path.exists(save_name):
-        os.makedirs(save_name)
-    else:
-        logger.info("Note! Saving path existed !")
+    if opt.resume_from == 'None':
+        save_name = f"{ts}_{opt.model}_{dataset_name}_{is_cf}_{pos}_{polar_transformation}_{opt.save_suffix}"
+        print("save_name : ", save_name)
+        if not os.path.exists(save_name):
+            os.makedirs(save_name)
+        else:
+            logger.info("Note! Saving path existed !")
 
-    with open(os.path.join(save_name,f"{ts}_parameter.json"), "w") as outfile:
-        json.dump(hyper_parameter_dict, outfile, indent=4)
+        with open(os.path.join(save_name,f"{ts}_parameter.json"), "w") as outfile:
+            json.dump(hyper_parameter_dict, outfile, indent=4)
+    else:
+        logger.info(f'loading model from : {opt.resume_from}')
+        save_name = opt.resume_from
 
     writer = SummaryWriter(save_name)
 
@@ -165,10 +192,22 @@ if __name__ == "__main__":
     else:
         raise RuntimeError("configs not implemented")
 
+
+    start_epoch = 0
+    if opt.resume_from != "None":
+        logger.info("loading checkpoint...")
+        model_path = os.path.join(opt.resume_from, "epoch_last", "epoch_last.pth")
+        checkpoint = torch.load(model_path)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        lrSchedule.load_state_dict(checkpoint['scheduler_state_dict'])
+        start_epoch = checkpoint['epoch']
+
     # Start training
     logger.info("start training...")
     best_epoch = {'acc':0, 'epoch':0}
-    for epoch in range(number_of_epoch):
+    for epoch in range(start_epoch, number_of_epoch):
+        logger.info(f"start epoch {epoch}")
         if is_cf:
             epoch_triplet_loss = 0
             epoch_cf_loss = 0
@@ -266,11 +305,13 @@ if __name__ == "__main__":
                 }, epoch)
             except:
                 print(valAcc)
-
+            # save best model
             if top1 > best_epoch['acc']:
                 best_epoch['acc'] = top1
                 best_epoch['epoch'] = epoch
-                save_model(save_name, model, epoch)
+                save_model(save_name, model, optimizer, lrSchedule, epoch, last=False)
+            # save last model
+            save_model(save_name, model, optimizer, lrSchedule, epoch, last=True)
             print(f"=================================================")
 
     # get the best model and recall

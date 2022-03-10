@@ -3,6 +3,14 @@ import numpy as np
 import os
 import math
 from torch.optim.lr_scheduler import LambdaLR
+import json
+
+def ReadConfig(path):
+    all_files = os.listdir(path)
+    config_file =  list(filter(lambda x: x.endswith('parameter.json'), all_files))
+    with open(os.path.join(path, config_file[0]), 'r') as f:
+        p = json.load(f)
+        return p
 
 class WarmupCosineSchedule(LambdaLR):
     """ Linear warmup and then cosine decay.
@@ -87,10 +95,25 @@ def CFLoss(vecs, hat_vecs, loss_weight=5.0):
 
     return loss
 
-def save_model(savePath, model, epoch):
-    modelFolder = os.path.join(savePath, f"epoch_{epoch}")
-    os.makedirs(modelFolder)
-    torch.save(model.state_dict(), os.path.join(modelFolder, f'trans_{epoch}.pth'))
+def save_model(savePath, model, optimizer, scheduler, epoch, last=True):
+    if last == True:
+        save_folder_name = "epoch_last"
+        model_name = "epoch_last.pth"
+    else:
+        save_folder_name = f"epoch_{epoch}"
+        model_name = f'epoch_{epoch}.pth'
+    modelFolder = os.path.join(savePath, save_folder_name)
+    if os.path.isdir(modelFolder):
+        pass
+    else:
+        os.makedirs(modelFolder)
+    # torch.save(model.state_dict(), os.path.join(modelFolder, f'trans_{epoch}.pth'))
+    torch.save({
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict()
+            }, os.path.join(modelFolder, model_name))
 
 
 def ValidateOne(distArray, topK):

@@ -14,6 +14,7 @@ import numpy as np
 import argparse
 import json
 
+from utils.utils import ReadConfig
 from models.SAFA_TR import SAFA_TR
 from models.BAP import SCN_ResNet
 from models.SAFA_vgg import SAFA_vgg
@@ -42,18 +43,12 @@ def ValidateAll(streetFeatures, satelliteFeatures):
 
 def GetBestModel(path):
     all_files = os.listdir(path)
+    if "epoch_last" in all_files:
+        all_files.remove("epoch_last")
     config_files =  list(filter(lambda x: x.startswith('epoch_'), all_files))
     config_files = sorted(list(map(lambda x: int(x.split("_")[1]), config_files)), reverse=True)
     best_epoch = config_files[0]
-    return os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
-            
-
-def ReadConfig(path):
-    all_files = os.listdir(path)
-    config_file =  list(filter(lambda x: x.endswith('parameter.json'), all_files))
-    with open(os.path.join(path, config_file[0]), 'r') as f:
-        p = json.load(f)
-        return p
+    return os.path.join('epoch_'+str(best_epoch), 'epoch_'+str(best_epoch)+'.pth')
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -133,7 +128,7 @@ if __name__ == "__main__":
     # best_model = os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
     best_model = os.path.join(opt.model_path, best_model)
     print("loading model : ", best_model)
-    model.load_state_dict(torch.load(best_model))
+    model.load_state_dict(torch.load(best_model)['model_state_dict'])
 
     print("start testing...")
 
