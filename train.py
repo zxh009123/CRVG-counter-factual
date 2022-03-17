@@ -21,11 +21,13 @@ import json
 from models.SAFA_TR import SAFA_TR
 from models.BAP import SCN_ResNet
 from models.SAFA_vgg import SAFA_vgg
+from models.TOPK_SAFA import TK_SAFA
 
 from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
      CFLoss, save_model, ValidateAll, WarmupCosineSchedule, ReadConfig
 
 args_do_not_overide = ['data_dir', 'verbose', 'resume_from']
+TR_BASED_MODELS = ['SAFA_TR', 'TK_SAFA']
 
 def GetBestModel(path):
     all_files = os.listdir(path)
@@ -38,16 +40,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
-    parser.add_argument("--lr", type=float, default=1e-3, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='test_load_save', help='name of the model at the end')
+    parser.add_argument("--lr", type=float, default=3e-5, help="learning rate")
+    parser.add_argument("--save_suffix", type=str, default='_TK_test', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
-    parser.add_argument("--SAFA_heads", type=int, default=16, help='number of SAFA heads')
-    parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
-    parser.add_argument("--TR_layers", type=int, default=6, help='number of layers in Transformer')
+    parser.add_argument("--SAFA_heads", type=int, default=4, help='number of SAFA heads')
+    parser.add_argument("--TR_heads", type=int, default=4, help='number of heads in Transformer')
+    parser.add_argument("--TR_layers", type=int, default=4, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
+    parser.add_argument("--weight_decay", type=float, default=0.03, help='weight decay value for optimizer')
+    parser.add_argument("--topK", type=int, default=10, help='K value in top-K pooling')
     parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
@@ -133,14 +137,16 @@ if __name__ == "__main__":
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
 
-    if opt.model == "SAFA_TR": #TR model need strong augmentation
+    if opt.model in TR_BASED_MODELS: #TR model need strong augmentation
         train_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
                         transforms.ColorJitter(0.2, 0.2, 0.2),
+                        transforms.RandomGrayscale(),
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
         train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
                         transforms.ColorJitter(0.2, 0.2, 0.2),
+                        transforms.RandomGrayscale(),
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
@@ -167,10 +173,14 @@ if __name__ == "__main__":
     validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
         batch_size=batch_size, shuffle=True, num_workers=8)
 
+    #To be noticed: safa_heads represent k in topk when SAFA_TR in topk mode
+    #change SAFA_TR mode in uncomment and comment line 233 to 243 in models/SAFA_TR.py 
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
     elif opt.model == "SAFA_TR":
         model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+    elif opt.model == "TK_SAFA":
+        model = TK_SAFA(safa_heads=number_SAFA_heads, top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
@@ -180,13 +190,13 @@ if __name__ == "__main__":
 
     #set optimizer and lr scheduler
     if opt.model == "SAFA_vgg":
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-6)
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay)
         lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
     elif opt.model == "SCN_ResNet":
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-6)
+        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay)
         lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 30).step)
-    elif opt.model == "SAFA_TR":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=0.03, eps=1e-6)
+    elif opt.model in TR_BASED_MODELS:
+        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay, eps=1e-6)
         # lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.97).step)
         lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
     else:
@@ -224,7 +234,6 @@ if __name__ == "__main__":
                 sat_global, grd_global = model(sat, grd, is_cf)
             # soft margin triplet loss
             triplet_loss = softMarginTripletLoss(sat_global, grd_global, gamma)
-
             if is_cf:# calculate CF loss
                 CFLoss_sat= CFLoss(sat_global, fake_sat_global)
                 CFLoss_grd = CFLoss(grd_global, fake_grd_global)
@@ -240,7 +249,7 @@ if __name__ == "__main__":
 
             optimizer.zero_grad()
             loss.backward()
-            if opt.model == "SAFA_TR":
+            if opt.model in TR_BASED_MODELS:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
         # adjust lr
