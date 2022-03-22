@@ -24,7 +24,8 @@ from models.SAFA_vgg import SAFA_vgg
 from models.TOPK_SAFA import TK_SAFA
 
 from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
-     CFLoss, save_model, ValidateAll, WarmupCosineSchedule, ReadConfig
+     CFLoss, save_model, ValidateAll, WarmupCosineSchedule,\
+     ReadConfig, softMarginTripletLossMX
 
 args_do_not_overide = ['data_dir', 'verbose', 'resume_from']
 TR_BASED_MODELS = ['SAFA_TR', 'TK_SAFA']
@@ -40,23 +41,26 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
-    parser.add_argument("--lr", type=float, default=3e-5, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='_TK_test', help='name of the model at the end')
+    parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
+    parser.add_argument("--save_suffix", type=str, default='_TK_r50', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=4, help='number of SAFA heads')
-    parser.add_argument("--TR_heads", type=int, default=4, help='number of heads in Transformer')
-    parser.add_argument("--TR_layers", type=int, default=4, help='number of layers in Transformer')
+    parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
+    parser.add_argument("--TR_layers", type=int, default=8, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument("--weight_decay", type=float, default=0.03, help='weight decay value for optimizer')
-    parser.add_argument("--topK", type=int, default=10, help='K value in top-K pooling')
+    parser.add_argument("--topK", type=int, default=100, help='K value in top-K pooling')
     parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
     parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
+    parser.add_argument('--mix', default=False, action='store_true', help='mix-up loss')
+    parser.add_argument('--fp16', default=False, action='store_true', help='mix-up loss')
+
 
     opt = parser.parse_args()
 
@@ -87,6 +91,9 @@ if __name__ == "__main__":
     logger.info("Configuration:")
     for k, v in hyper_parameter_dict.items():
         print(f"{k} : {v}")
+
+    if opt.fp16: # mixed-precision training
+        from apex import amp
     
     if opt.no_polar:
         SATELLITE_IMG_WIDTH = 256
@@ -180,12 +187,12 @@ if __name__ == "__main__":
     elif opt.model == "SAFA_TR":
         model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "TK_SAFA":
-        model = TK_SAFA(safa_heads=number_SAFA_heads, top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+        model = TK_SAFA(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
         raise RuntimeError(f"model {opt.model} is not implemented")
-    model = nn.DataParallel(model)
+    # model = nn.DataParallel(model)
     model.to(device)
 
     #set optimizer and lr scheduler
@@ -201,6 +208,12 @@ if __name__ == "__main__":
         lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
     else:
         raise RuntimeError("configs not implemented")
+
+    if opt.fp16:
+        model, optimizer = amp.initialize(models=model,
+                                          optimizers=optimizer,
+                                          opt_level="O1")
+        # amp._amp_state.loss_scalers[0]._loss_scale = 2**20 #magic number
 
 
     start_epoch = 0
@@ -233,7 +246,11 @@ if __name__ == "__main__":
             else:
                 sat_global, grd_global = model(sat, grd, is_cf)
             # soft margin triplet loss
-            triplet_loss = softMarginTripletLoss(sat_global, grd_global, gamma)
+            if opt.mix == False:
+                triplet_loss = softMarginTripletLoss(sat_global, grd_global, gamma)
+            else:
+                triplet_loss = softMarginTripletLossMX(sat_global, grd_global, gamma)
+            
             if is_cf:# calculate CF loss
                 CFLoss_sat= CFLoss(sat_global, fake_sat_global)
                 CFLoss_grd = CFLoss(grd_global, fake_grd_global)
@@ -248,9 +265,18 @@ if __name__ == "__main__":
 
 
             optimizer.zero_grad()
-            loss.backward()
+
+            if opt.fp16:
+                with amp.scale_loss(loss, optimizer) as scaled_loss:
+                    scaled_loss.backward()
+            else:
+                loss.backward()
+
             if opt.model in TR_BASED_MODELS:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                if opt.fp16:
+                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 1.0)
+                else:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
         # adjust lr
         lrSchedule.step()
