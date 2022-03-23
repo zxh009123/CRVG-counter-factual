@@ -10,11 +10,11 @@ class LearnablePE(nn.Module):
     def __init__(self, d_model, dropout = 0.3, max_len = 8):
         super().__init__()
         #CLS token
-        cls_token = torch.zeros(1, 1, d_model, dtype=torch.float32)
+        cls_token = torch.zeros(1, 1, d_model)
         self.cls_token = nn.Parameter(cls_token)
 
         self.dropout = nn.Dropout(p=dropout)
-        pe = torch.zeros(1, max_len, d_model, dtype=torch.float32)
+        pe = torch.zeros(1, max_len, d_model)
         self.pe = torch.nn.Parameter(pe)
 
     def forward(self, x):
@@ -52,7 +52,7 @@ class ResNet34(nn.Module):
         layers = list(net.children())[:3]
         layers_end = list(net.children())[4:-3]
         self.layers = nn.Sequential(*layers, *layers_end)
-        print(self.layers)
+        # print(self.layers)
         #(256, H/8, W/8)
         #(512, H/32, W/32)
 
@@ -73,7 +73,7 @@ class ResNet50(nn.Module):
         layers_end = list(net.children())[4:-2]
         self.layers = nn.Sequential(*layers, *layers_end)
 
-        print(self.layers)
+        # print(self.layers)
 
         # layers = list(net.children())[:-2]
         # self.layers = nn.Sequential(*layers)
@@ -106,18 +106,18 @@ class SA_TOPK(nn.Module):
         hid_dim = in_dim // 2
         
         #First layer parameter initialization
-        self.w1 = torch.empty(in_dim, hid_dim, dtype=torch.float32)
+        self.w1 = torch.empty(in_dim, hid_dim)
         nn.init.normal_(self.w1, mean=0.0, std=0.005)
-        self.b1 = torch.empty(1, hid_dim, dtype=torch.float32)
+        self.b1 = torch.empty(1, hid_dim)
         nn.init.constant_(self.b1, val=0.1)
 
         self.w1 = torch.nn.Parameter(self.w1)
         self.b1 = torch.nn.Parameter(self.b1)
 
         #Second layer parameter initialization
-        self.w2 = torch.empty(hid_dim, in_dim, dtype=torch.float32)
+        self.w2 = torch.empty(hid_dim, in_dim)
         nn.init.normal_(self.w2, mean=0.0, std=0.005)
-        self.b2 = torch.empty(1, in_dim, dtype=torch.float32)
+        self.b2 = torch.empty(1, in_dim)
         nn.init.constant_(self.b2, val=0.1)
 
         self.w2 = torch.nn.Parameter(self.w2)
@@ -130,7 +130,6 @@ class SA_TOPK(nn.Module):
     def forward(self, x, is_cf):
         channel = x.shape[1]
         mask, _ = torch.topk(x, self.topk, dim=1, sorted=True)
-        mask = mask.to(torch.float32)
         mask = torch.einsum('bci, id -> bcd', mask, self.w1) + self.b1
        
         mask = torch.einsum('bcd, di -> bci', mask, self.w2) + self.b2

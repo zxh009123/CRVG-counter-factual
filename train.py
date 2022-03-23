@@ -93,7 +93,8 @@ if __name__ == "__main__":
         print(f"{k} : {v}")
 
     if opt.fp16: # mixed-precision training
-        from apex import amp
+        # from apex import amp
+        scaler = torch.cuda.amp.GradScaler()
     
     if opt.no_polar:
         SATELLITE_IMG_WIDTH = 256
@@ -169,7 +170,7 @@ if __name__ == "__main__":
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     #dataloader now only support CVUSA
     # TODO: add support to CVACT
@@ -192,7 +193,7 @@ if __name__ == "__main__":
         model = SCN_ResNet()
     else:
         raise RuntimeError(f"model {opt.model} is not implemented")
-    # model = nn.DataParallel(model)
+    model = nn.DataParallel(model)
     model.to(device)
 
     #set optimizer and lr scheduler
@@ -209,11 +210,11 @@ if __name__ == "__main__":
     else:
         raise RuntimeError("configs not implemented")
 
-    if opt.fp16:
-        model, optimizer = amp.initialize(models=model,
-                                          optimizers=optimizer,
-                                          opt_level="O1")
-        # amp._amp_state.loss_scalers[0]._loss_scale = 2**20 #magic number
+    # if opt.fp16:
+    #     model, optimizer = amp.initialize(models=model,
+    #                                       optimizers=optimizer,
+    #                                       opt_level="O1")
+    #     amp._amp_state.loss_scalers[0]._loss_scale = 2**20 #magic number
 
 
     start_epoch = 0
@@ -238,46 +239,51 @@ if __name__ == "__main__":
             epoch_loss = 0
         model.train() # set model to train
         for batch in tqdm(dataloader, disable = opt.verbose):
-            sat = batch['satellite'].to(device)
-            grd = batch['ground'].to(device)
-
-            if is_cf:
-                sat_global, grd_global, fake_sat_global, fake_grd_global = model(sat, grd, is_cf)
-            else:
-                sat_global, grd_global = model(sat, grd, is_cf)
-            # soft margin triplet loss
-            if opt.mix == False:
-                triplet_loss = softMarginTripletLoss(sat_global, grd_global, gamma)
-            else:
-                triplet_loss = softMarginTripletLossMX(sat_global, grd_global, gamma)
-            
-            if is_cf:# calculate CF loss
-                CFLoss_sat= CFLoss(sat_global, fake_sat_global)
-                CFLoss_grd = CFLoss(grd_global, fake_grd_global)
-                CFLoss_total = (CFLoss_sat + CFLoss_grd) / 2.0
-                loss = triplet_loss + CFLoss_total
-
-                epoch_triplet_loss += triplet_loss.item()
-                epoch_cf_loss += CFLoss_total.item()
-            else:
-                loss = triplet_loss
-                epoch_loss += loss.item()
-
 
             optimizer.zero_grad()
 
+            sat = batch['satellite'].to(device)
+            grd = batch['ground'].to(device)
+
+            with torch.cuda.amp.autocast(enabled=opt.fp16):
+                if is_cf:
+                    sat_global, grd_global, fake_sat_global, fake_grd_global = model(sat, grd, is_cf)
+                else:
+                    sat_global, grd_global = model(sat, grd, is_cf)
+                # soft margin triplet loss
+                if opt.mix == False:
+                    triplet_loss = softMarginTripletLoss(sat_global, grd_global, gamma)
+                else:
+                    triplet_loss = softMarginTripletLossMX(sat_global, grd_global, gamma)
+                
+                if is_cf:# calculate CF loss
+                    CFLoss_sat= CFLoss(sat_global, fake_sat_global)
+                    CFLoss_grd = CFLoss(grd_global, fake_grd_global)
+                    CFLoss_total = (CFLoss_sat + CFLoss_grd) / 2.0
+                    loss = triplet_loss + CFLoss_total
+
+                    epoch_triplet_loss += triplet_loss.item()
+                    epoch_cf_loss += CFLoss_total.item()
+                else:
+                    loss = triplet_loss
+                    epoch_loss += loss.item()
+
             if opt.fp16:
-                with amp.scale_loss(loss, optimizer) as scaled_loss:
-                    scaled_loss.backward()
+                scaler.scale(loss).backward()
             else:
                 loss.backward()
 
             if opt.model in TR_BASED_MODELS:
                 if opt.fp16:
-                    torch.nn.utils.clip_grad_norm_(amp.master_params(optimizer), 1.0)
+                    scaler.unscale_(optimizer)
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 else:
                     torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            optimizer.step()
+            if opt.fp16:
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                optimizer.step()
         # adjust lr
         lrSchedule.step()
 
