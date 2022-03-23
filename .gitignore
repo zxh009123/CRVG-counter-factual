@@ -158,3 +158,4 @@ cython_debug/
 data_preparation.py
 myjob*
 *.sh
+*.jpg
