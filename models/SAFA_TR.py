@@ -5,6 +5,17 @@ import torchvision.models as models
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
 import math
 
+class LearnablePE(nn.Module):
+
+    def __init__(self, d_model, dropout = 0.3, max_len = 8):
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        self.pe = torch.nn.Parameter(torch.zeros(1, max_len, d_model))
+
+    def forward(self, x):
+        x = x + self.pe
+        return self.dropout(x)
+
 class PositionalEncoding(nn.Module):
 
     def __init__(self, d_model = 256, max_len = 16, dropout=0.3):
@@ -130,6 +141,8 @@ class SA(nn.Module):
 
         return mask
 
+
+
 class SAFA_TR(nn.Module):
     def __init__(self, safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos'):
         super().__init__()
@@ -174,6 +187,7 @@ class SAFA_TR(nn.Module):
         else:
             self.spatial_aware_sat = SA(in_dim=1024, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
 
+
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
 
@@ -213,8 +227,9 @@ class SAFA_TR(nn.Module):
             return sat_global, grd_global
 
 if __name__ == "__main__":
-    model = SAFA_TR(safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos')
+    model = SAFA_TR(safa_heads=12, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True)
     sat = torch.randn(7, 3, 122, 671)
+    # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)
     result = model(sat, grd, True)
     for i in result:
