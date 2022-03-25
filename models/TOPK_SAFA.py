@@ -50,7 +50,7 @@ class ResNet34(nn.Module):
         super().__init__()
         net = models.resnet34(pretrained=True)
         layers = list(net.children())[:3]
-        layers_end = list(net.children())[4:-3]
+        layers_end = list(net.children())[4:-2]
         self.layers = nn.Sequential(*layers, *layers_end)
         # print(self.layers)
         #(256, H/8, W/8)
@@ -99,52 +99,62 @@ class SA_TR_TOPK(nn.Module):
         return output
 
 class SA_TOPK(nn.Module):
-    def __init__(self, in_dim, top_k=100, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048):
+    def __init__(self, in_dim, safa_heads=8, top_k=100, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
         self.topk = top_k
         #in_dim = H*W
         hid_dim = in_dim // 2
         
         #First layer parameter initialization
-        self.w1 = torch.empty(in_dim, hid_dim)
+        self.w1 = torch.empty(in_dim, hid_dim, safa_heads)
         nn.init.normal_(self.w1, mean=0.0, std=0.005)
-        self.b1 = torch.empty(1, hid_dim)
+        self.b1 = torch.empty(1, hid_dim, safa_heads)
         nn.init.constant_(self.b1, val=0.1)
 
         self.w1 = torch.nn.Parameter(self.w1)
         self.b1 = torch.nn.Parameter(self.b1)
 
         #Second layer parameter initialization
-        self.w2 = torch.empty(hid_dim, in_dim)
+        self.w2 = torch.empty(hid_dim, in_dim, safa_heads)
         nn.init.normal_(self.w2, mean=0.0, std=0.005)
-        self.b2 = torch.empty(1, in_dim)
+        self.b2 = torch.empty(1, in_dim, safa_heads)
         nn.init.constant_(self.b2, val=0.1)
 
         self.w2 = torch.nn.Parameter(self.w2)
         self.b2 = torch.nn.Parameter(self.b2)
-        # 256 is the output channel of Res34
+        # 512 is the output channel of Res34
         # 2048 is the output channel of Res34
-        self.safa_tr = SA_TR_TOPK(d_model=2048, top_k = top_k, nhead=tr_heads, nlayers=tr_layers, dropout = dropout, d_hid=d_hid)
+        self.safa_tr = SA_TR_TOPK(d_model=512 * safa_heads, top_k = top_k, nhead=tr_heads, nlayers=tr_layers, dropout = dropout, d_hid=d_hid)
 
 
     def forward(self, x, is_cf):
         channel = x.shape[1]
+        #TODO: substitute topk with conv layer
         mask, _ = torch.topk(x, self.topk, dim=1, sorted=True)
-        mask = torch.einsum('bci, id -> bcd', mask, self.w1) + self.b1
+        mask = torch.einsum('bci, idj -> bcdj', mask, self.w1) + self.b1
        
-        mask = torch.einsum('bcd, di -> bci', mask, self.w2) + self.b2
+        mask = torch.einsum('bcdj, dij -> bcij', mask, self.w2) + self.b2
 
         # hardtanh for mapping the value from -1 to 1
         mask = F.hardtanh(mask)
 
-        batch, top_k, feat_dim = mask.shape[0], mask.shape[1], mask.shape[2]
+        batch, top_k, feat_dim, safa_heads = mask.shape[0], mask.shape[1], mask.shape[2], mask.shape[3]
+        #permute mask to (B, f_dim, TOPK, safa_heads)
+        mask = mask.permute(0, 2, 1, 3)
+        #reshape mask to (B, f_dim, TOPK*safa_heads)
+        mask = mask.reshape(batch, feat_dim, top_k*safa_heads)
 
         # permute original feature to (B,H*W,C) for matmul later
-        x = x.permute(0,2,1)
+        # x = x.permute(0,2,1)
 
         if is_cf:
-            # Usning matmul to filter feature reshape to (B, topk, feature)
-            features = torch.matmul(mask, x).reshape(batch, top_k, -1)
+            # Usning matmul to filter feature
+            # features = torch.matmul(x, mask).reshape(batch, top_k, -1)
+            # channel is number of channels in raw feature
+            features = torch.matmul(x, mask).view(batch, channel, top_k, safa_heads)
+            # permute to (batch, topk, channel, safa_heads)
+            features = features.permute(0, 2, 1, 3)
+            features = features.reshape(batch, top_k, -1)
 
             # Feed to transformer
             features = self.safa_tr(features)
@@ -156,14 +166,19 @@ class SA_TOPK(nn.Module):
             #random generate fake masks
             # Remaining steps are similar as previous
             fake_mask = torch.zeros_like(mask).uniform_(-1, 1)
-            fake_features = torch.matmul(fake_mask, x).reshape(batch, top_k, -1)
+            fake_features = torch.matmul(x, fake_mask).view(batch, channel, top_k, safa_heads)
+            fake_features = fake_features.permute(0, 2, 1, 3)
+            fake_features = fake_features.reshape(batch, top_k, -1)
 
             fake_features = self.safa_tr(fake_features)
             fake_feature = fake_features[:, 0]
             fake_feature = F.normalize(fake_feature, p=2, dim=1)
             return feature, fake_feature
         else: # Similar to previous
-            features = torch.matmul(mask, x).reshape(batch, top_k, -1)
+            # features = torch.matmul(x, mask).reshape(batch, top_k, -1)
+            features = torch.matmul(x, mask).view(batch, channel, top_k, safa_heads)
+            features = features.permute(0, 2, 1, 3)
+            features = features.reshape(batch, top_k, -1)
 
             features = self.safa_tr(features)
             feature = features[:, 0]
@@ -172,22 +187,12 @@ class SA_TOPK(nn.Module):
             return feature
 
 class TK_SAFA(nn.Module):
-    def __init__(self, top_k=10, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos'):
+    def __init__(self, safa_heads=8, top_k=10, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos'):
         super().__init__()
 
         #res34
-        # self.backbone_grd = ResNet34()
-        # self.backbone_sat = ResNet34()
-        # if is_polar:
-        #     in_dim_sat = 1344
-        #     in_dim_grd = 1344
-        # else:
-        #     in_dim_sat = 1024
-        #     in_dim_grd = 1344
-
-        self.backbone_grd = ResNet50()
-        self.backbone_sat = ResNet50()
-        #res50
+        self.backbone_grd = ResNet34()
+        self.backbone_sat = ResNet34()
         if is_polar:
             in_dim_sat = 336
             in_dim_grd = 336
@@ -195,11 +200,21 @@ class TK_SAFA(nn.Module):
             in_dim_sat = 256
             in_dim_grd = 336
 
-        self.spatial_aware_grd = SA_TOPK(in_dim=in_dim_grd, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+        # self.backbone_grd = ResNet50()
+        # self.backbone_sat = ResNet50()
+        # #res50
+        # if is_polar:
+        #     in_dim_sat = 336
+        #     in_dim_grd = 336
+        # else:
+        #     in_dim_sat = 256
+        #     in_dim_grd = 336
+
+        self.spatial_aware_grd = SA_TOPK(in_dim=in_dim_grd, safa_heads=safa_heads, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
         if is_polar:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, safa_heads=safa_heads, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
         else:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, safa_heads=safa_heads, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
 
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
