@@ -157,8 +157,8 @@ class SAFA_TR50(nn.Module):
         else:
             self.spatial_aware_sat = SA(in_dim=1024, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
 
-        self.filter_sat = nn.Conv1d(12, 12, kernel_size=7, stride=4)
-        self.filter_grd = nn.Conv1d(12, 12, kernel_size=7, stride=4)
+        self.filter_sat = nn.Conv1d(safa_heads, safa_heads, kernel_size=7, stride=4)
+        self.filter_grd = nn.Conv1d(safa_heads, safa_heads, kernel_size=7, stride=4)
 
     def forward(self, sat, grd, is_cf=False):
         b = sat.shape[0]

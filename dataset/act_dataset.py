@@ -75,18 +75,26 @@ class TrainDataset(Dataset):
 
     def __getitem__(self, idx):
 
-        
-        x = Image.open(self.trainList[idx][0])
-        # width, height = x.size
-        # x = x.crop((0, 265, width, 265+302))
-        x = self.transform_sat(x)
-        
-        y = Image.open(self.trainList[idx][1])
-        # if self.polar:
-        #     y = self.transform(y)
-        # else:
-        #     y = self.transform_1(y)
-        y = self.transform_grd(y)
+        itmp = 0
+        while(True):
+            local_idx = idx + itmp
+            try:
+                x = Image.open(self.trainList[local_idx][0])
+                # width, height = x.size
+                # x = x.crop((0, 265, width, 265+302))
+                x = self.transform_grd(x)
+                
+                y = Image.open(self.trainList[local_idx][1])
+                # if self.polar:
+                #     y = self.transform(y)
+                # else:
+                #     y = self.transform_1(y)
+                y = self.transform_sat(y)
+
+                break
+
+            except:
+                itmp += 1
 
         # return x, y
         return {'satellite':y, 'ground':x}
@@ -148,11 +156,19 @@ class TestDataset(Dataset):
         self.__cur_test_id = 0      
 
     def __getitem__(self, idx):
-        x = Image.open(self.valList[idx][0])
-        x = self.transform_grd(x)
+        itmp = 0
+        while(True):
+            local_idx = idx + itmp
+            try:
+                x = Image.open(self.valList[local_idx][0])
+                x = self.transform_grd(x)
 
-        y = Image.open(self.valList[idx][1])
-        y = self.transform_sat(y)
+                y = Image.open(self.valList[local_idx][1])
+                y = self.transform_sat(y)
+
+                break
+            except:
+                itmp += 1
 
         # return x, y
         return {'satellite':y, 'ground':x}

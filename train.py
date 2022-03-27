@@ -29,7 +29,7 @@ from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
      ReadConfig, softMarginTripletLossMX
 
 args_do_not_overide = ['data_dir', 'verbose', 'resume_from']
-TR_BASED_MODELS = ['SAFA_TR', 'TK_SAFA']
+TR_BASED_MODELS = ['SAFA_TR', 'SAFA_TR50', 'TK_SAFA']
 
 def GetBestModel(path):
     all_files = os.listdir(path)
