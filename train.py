@@ -19,6 +19,7 @@ import time
 import json
 
 from models.SAFA_TR import SAFA_TR
+from models.SAFA_TR50 import SAFA_TR50
 from models.BAP import SCN_ResNet
 from models.SAFA_vgg import SAFA_vgg
 from models.TOPK_SAFA import TK_SAFA
@@ -187,6 +188,8 @@ if __name__ == "__main__":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
     elif opt.model == "SAFA_TR":
         model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+    elif opt.model == "SAFA_TR50":
+        model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "TK_SAFA":
         model = TK_SAFA(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "SCN_ResNet":
