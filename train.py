@@ -38,29 +38,42 @@ def GetBestModel(path):
     best_epoch = config_files[0]
     return os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
 
+def FreezeBackBone(model):
+    freezed_params = []
+    for name, param in model.named_parameters():
+        if "backbone" in name:
+            param.requires_grad = False
+            freezed_params.append(name)
+    # print("Freezed parameters : ", freezed_params)
+
+
+def UnFreezeBackBone(model):
+    for name, param in model.named_parameters():
+        param.requires_grad = True
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='_TK_r50', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='_test', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
-    parser.add_argument("--SAFA_heads", type=int, default=4, help='number of SAFA heads')
-    parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
-    parser.add_argument("--TR_layers", type=int, default=8, help='number of layers in Transformer')
+    parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
+    parser.add_argument("--TR_heads", type=int, default=4, help='number of heads in Transformer')
+    parser.add_argument("--TR_layers", type=int, default=2, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument("--weight_decay", type=float, default=0.03, help='weight decay value for optimizer')
-    parser.add_argument("--topK", type=int, default=100, help='K value in top-K pooling')
+    parser.add_argument("--topK", type=int, default=10, help='K value in top-K pooling')
     parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
     parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
     parser.add_argument('--mix', default=False, action='store_true', help='mix-up loss')
-    parser.add_argument('--fp16', default=False, action='store_true', help='mix-up loss')
+    parser.add_argument('--fp16', default=False, action='store_true', help='mixed precision')
 
 
     opt = parser.parse_args()
@@ -191,7 +204,7 @@ if __name__ == "__main__":
     elif opt.model == "SAFA_TR50":
         model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "TK_SAFA":
-        model = TK_SAFA(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+        model = TK_SAFA(top_k=opt.topK, safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
@@ -234,6 +247,15 @@ if __name__ == "__main__":
     logger.info("start training...")
     best_epoch = {'acc':0, 'epoch':0}
     for epoch in range(start_epoch, number_of_epoch):
+        
+        if epoch == 0:
+            logger.info("Backbone freezing")
+            FreezeBackBone(model)
+        
+        if epoch == 10:
+            logger.info("Backbone unfreezing")
+            UnFreezeBackBone(model)
+
         logger.info(f"start epoch {epoch}")
         if is_cf:
             epoch_triplet_loss = 0
