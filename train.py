@@ -55,7 +55,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='_test', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='_no_aug', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
@@ -159,15 +159,23 @@ if __name__ == "__main__":
                     ]
 
     if opt.model in TR_BASED_MODELS: #TR model need strong augmentation
+        # train_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
+        #                 transforms.ColorJitter(0.2, 0.2, 0.2),
+        #                 transforms.RandomGrayscale(),
+        #                 transforms.ToTensor(),
+        #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+        #                 ]
+        # train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
+        #                 transforms.ColorJitter(0.2, 0.2, 0.2),
+        #                 transforms.RandomGrayscale(),
+        #                 transforms.ToTensor(),
+        #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+        #                 ]
         train_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-                        transforms.ColorJitter(0.2, 0.2, 0.2),
-                        transforms.RandomGrayscale(),
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
         train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                        transforms.ColorJitter(0.2, 0.2, 0.2),
-                        transforms.RandomGrayscale(),
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
@@ -245,13 +253,13 @@ if __name__ == "__main__":
     best_epoch = {'acc':0, 'epoch':0}
     for epoch in range(start_epoch, number_of_epoch):
         
-        if epoch == 0:
-            logger.info("Backbone freezing")
-            FreezeBackBone(model)
+        # if epoch == 0:
+        #     logger.info("Backbone freezing")
+        #     FreezeBackBone(model)
         
-        if epoch == 10:
-            logger.info("Backbone unfreezing")
-            UnFreezeBackBone(model)
+        # if epoch == 5:
+        #     logger.info("Backbone unfreezing")
+        #     UnFreezeBackBone(model)
 
         logger.info(f"start epoch {epoch}")
         if is_cf:
