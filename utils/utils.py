@@ -86,56 +86,40 @@ def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=
     loss = (loss_s2p + loss_p2s) / 2.0
     return loss
 
-def softMarginTripletLossMX(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=1.0):
-    #Generate mixup pairs
-    sate_vecs_copy = torch.clone(sate_vecs).to(sate_vecs.get_device()).detach()
-    pano_vecs_copy = torch.clone(pano_vecs).to(pano_vecs.get_device()).detach()
-    # Row shuffling
-    sate_vecs_shuffle=sate_vecs_copy[torch.randperm(sate_vecs_copy.size()[0])]
-    pano_vecs_shuffle=pano_vecs_copy[torch.randperm(pano_vecs_copy.size()[0])]
-    #random weights in range 0.4 to 0.7
-    weights = (0.3 - 0.7) * torch.rand(2, sate_vecs.shape[1]) + 0.7
-    weights = weights.to(sate_vecs.get_device())
-
-    random_sate_vecs = (1.0 - weights[0]) * sate_vecs + weights[0] * sate_vecs_shuffle
-    random_pano_vecs = (1.0 - weights[1]) * pano_vecs + weights[1] * pano_vecs_shuffle
-
-    random_sate_vecs = F.normalize(random_sate_vecs, p=2, dim=1)
-    random_pano_vecs = F.normalize(random_pano_vecs, p=2, dim=1)
-    # print(random_sate_vecs[0])
-    # print(random_pano_vecs[0])
-    # print(sate_vecs[0])
-    # print(pano_vecs[0])
-    sate_vecs = torch.cat([sate_vecs, random_sate_vecs], dim=0)
-    pano_vecs = torch.cat([pano_vecs, random_pano_vecs], dim=0)
-
-    dists = 2 - 2 * torch.matmul(sate_vecs, pano_vecs.permute(1, 0))  # Pairwise matches within batch
-    pos_dists = torch.diag(dists)
-    N = len(pos_dists)
+def IntraLoss(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=1.0):
+    # satllite pairwise
+    dists_sat = 2 - 2 * torch.matmul(sate_vecs, sate_vecs.permute(1, 0))
+    pos_dists_sat = torch.diag(dists_sat)
+    N = len(pos_dists_sat)
     diag_ids = np.arange(N)
     num_hard_triplets = int(hard_topk_ratio * (N * (N - 1))) if hard_topk_ratio < 1.0 else N * (N - 1)
 
-    # Match from satellite to street pano
-    triplet_dist_s2p = pos_dists.unsqueeze(1) - dists
-    loss_s2p = torch.log(1 + torch.exp(loss_weight * triplet_dist_s2p))
-    loss_s2p[diag_ids, diag_ids] = 0  # Ignore diagnal losses
+    triplet_dist_sat = pos_dists_sat - dists_sat
+    loss_sat = torch.log(1 + torch.exp(loss_weight * triplet_dist_sat))
+    loss_sat[diag_ids, diag_ids] = 0  # Ignore diagnal losses
 
     if hard_topk_ratio < 1.0:  # Hard negative mining
-        loss_s2p = loss_s2p.view(-1)
-        loss_s2p, s2p_ids = torch.topk(loss_s2p, num_hard_triplets)
-    loss_s2p = loss_s2p.sum() / num_hard_triplets
+        loss_sat = loss_sat.view(-1)
+        loss_sat, p2s_ids = torch.topk(loss_sat, num_hard_triplets)
+    loss_sat = loss_sat.sum() / num_hard_triplets
 
-    # Match from street pano to satellite
-    triplet_dist_p2s = pos_dists - dists
-    loss_p2s = torch.log(1 + torch.exp(loss_weight * triplet_dist_p2s))
-    loss_p2s[diag_ids, diag_ids] = 0  # Ignore diagnal losses
+    dists_pano = 2 - 2 * torch.matmul(pano_vecs, pano_vecs.permute(1, 0))
+    pos_dists_pano = torch.diag(dists_pano)
+    N = len(pos_dists_pano)
+    diag_ids = np.arange(N)
+    num_hard_triplets = int(hard_topk_ratio * (N * (N - 1))) if hard_topk_ratio < 1.0 else N * (N - 1)
+
+    # pano pairwise
+    triplet_dist_pano = pos_dists_pano - dists_pano
+    loss_pano = torch.log(1 + torch.exp(loss_weight * triplet_dist_pano))
+    loss_pano[diag_ids, diag_ids] = 0  # Ignore diagnal losses
 
     if hard_topk_ratio < 1.0:  # Hard negative mining
-        loss_p2s = loss_p2s.view(-1)
-        loss_p2s, p2s_ids = torch.topk(loss_p2s, num_hard_triplets)
-    loss_p2s = loss_p2s.sum() / num_hard_triplets
-    # Total loss
-    loss = (loss_s2p + loss_p2s) / 2.0
+        loss_pano = loss_pano.view(-1)
+        loss_pano, p2s_ids = torch.topk(loss_pano, num_hard_triplets)
+    loss_pano = loss_pano.sum() / num_hard_triplets
+
+    loss = (loss_pano + loss_sat) / 2.0
     return loss
 
 def CFLoss(vecs, hat_vecs, loss_weight=5.0):
@@ -196,4 +180,5 @@ if __name__ == "__main__":
     a = F.normalize(a, p=2, dim=1)
     b = F.normalize(b, p=2, dim=1)
 
-    print(softMarginTripletLossMX(a, b))
+    # print(softMarginTripletLossMX(a, b))
+    print(IntraLoss(a, b, 0.4))

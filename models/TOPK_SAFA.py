@@ -99,29 +99,34 @@ class SA_TR_TOPK(nn.Module):
         return output
 
 class SA_TOPK(nn.Module):
-    def __init__(self, in_dim, safa_heads=8, top_k=100, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048):
+    def __init__(self, in_dim, safa_heads=8, top_k=100, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_TKPool = True):
         super().__init__()
         self.topk = top_k
         #in_dim = H*W
         hid_dim = in_dim // 2
-        
-        #First layer parameter initialization
-        self.w1 = torch.empty(in_dim, hid_dim, safa_heads)
-        nn.init.normal_(self.w1, mean=0.0, std=0.005)
-        self.b1 = torch.empty(1, hid_dim, safa_heads)
-        nn.init.constant_(self.b1, val=0.1)
 
-        self.w1 = torch.nn.Parameter(self.w1)
-        self.b1 = torch.nn.Parameter(self.b1)
+        self.is_TKPool = is_TKPool
 
-        #Second layer parameter initialization
-        self.w2 = torch.empty(hid_dim, in_dim, safa_heads)
-        nn.init.normal_(self.w2, mean=0.0, std=0.005)
-        self.b2 = torch.empty(1, in_dim, safa_heads)
-        nn.init.constant_(self.b2, val=0.1)
+        if self.is_TKPool:
+            #First layer parameter initialization
+            self.w1 = torch.empty(in_dim, hid_dim, safa_heads)
+            nn.init.normal_(self.w1, mean=0.0, std=0.005)
+            self.b1 = torch.empty(1, hid_dim, safa_heads)
+            nn.init.constant_(self.b1, val=0.1)
 
-        self.w2 = torch.nn.Parameter(self.w2)
-        self.b2 = torch.nn.Parameter(self.b2)
+            self.w1 = torch.nn.Parameter(self.w1)
+            self.b1 = torch.nn.Parameter(self.b1)
+
+            #Second layer parameter initialization
+            self.w2 = torch.empty(hid_dim, in_dim, safa_heads)
+            nn.init.normal_(self.w2, mean=0.0, std=0.005)
+            self.b2 = torch.empty(1, in_dim, safa_heads)
+            nn.init.constant_(self.b2, val=0.1)
+
+            self.w2 = torch.nn.Parameter(self.w2)
+            self.b2 = torch.nn.Parameter(self.b2)
+        else:
+            self.conv_pool = torch.nn.Conv1d(512, self.topk * safa_heads, 3, stride=1, padding=1, bias=True)
         # 512 is the output channel of Res34
         # 2048 is the output channel of Res34
         self.safa_tr = SA_TR_TOPK(d_model=512 * safa_heads, top_k = top_k, nhead=tr_heads, nlayers=tr_layers, dropout = dropout, d_hid=d_hid)
@@ -129,11 +134,15 @@ class SA_TOPK(nn.Module):
 
     def forward(self, x, is_cf):
         channel = x.shape[1]
-        #TODO: substitute topk with conv layer
-        mask, _ = torch.topk(x, self.topk, dim=1, sorted=True)
-        mask = torch.einsum('bci, idj -> bcdj', mask, self.w1) + self.b1
-       
-        mask = torch.einsum('bcdj, dij -> bcij', mask, self.w2) + self.b2
+        if self.is_TKPool:
+            mask, _ = torch.topk(x, self.topk, dim=1, sorted=True)
+            mask = torch.einsum('bci, idj -> bcdj', mask, self.w1) + self.b1
+        
+            mask = torch.einsum('bcdj, dij -> bcij', mask, self.w2) + self.b2
+        else:
+            mask = self.conv_pool(x)
+            mask = mask.view(x.shape[0], self.topk, -1, x.shape[2])
+            mask = mask.permute(0, 1, 3, 2)
 
         # hardtanh for mapping the value from -1 to 1
         mask = F.hardtanh(mask)
@@ -187,7 +196,7 @@ class SA_TOPK(nn.Module):
             return feature
 
 class TK_SAFA(nn.Module):
-    def __init__(self, safa_heads=8, top_k=10, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos'):
+    def __init__(self, safa_heads=8, top_k=10, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos', TK_Pool=True):
         super().__init__()
 
         #res34
@@ -210,11 +219,12 @@ class TK_SAFA(nn.Module):
         #     in_dim_sat = 256
         #     in_dim_grd = 336
 
-        self.spatial_aware_grd = SA_TOPK(in_dim=in_dim_grd, safa_heads=safa_heads, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+
+        self.spatial_aware_grd = SA_TOPK(in_dim=in_dim_grd, safa_heads=safa_heads, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, is_TKPool = TK_Pool)
         if is_polar:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, safa_heads=safa_heads, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, safa_heads=safa_heads, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, is_TKPool = TK_Pool)
         else:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, safa_heads=safa_heads, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, safa_heads=safa_heads, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, is_TKPool = TK_Pool)
 
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
@@ -235,16 +245,16 @@ class TK_SAFA(nn.Module):
             return sat_feature, grd_feature
 
 if __name__ == "__main__":
-    # model = TK_SAFA(top_k=100, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True)
-    # sat = torch.randn(7, 3, 122, 671)
-    sat = torch.randn(7, 3, 256, 256)
-    # grd = torch.randn(7, 3, 122, 671)
-    # result = model(sat, grd, True)
-    # for i in result:
-    #     print(i.shape)
+    model = TK_SAFA(top_k=100, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True, TK_Pool=True)
+    sat = torch.randn(7, 3, 122, 671)
+    # sat = torch.randn(7, 3, 256, 256)
+    grd = torch.randn(7, 3, 122, 671)
+    result = model(sat, grd, True)
+    for i in result:
+        print(i.shape)
 
-    model = ResNet34()
-    r = model(sat)
-    print(r.shape)
+    # model = ResNet34()
+    # r = model(sat)
+    # print(r.shape)
 
 

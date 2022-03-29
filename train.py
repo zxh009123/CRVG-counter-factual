@@ -26,7 +26,7 @@ from models.TOPK_SAFA import TK_SAFA
 
 from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
      CFLoss, save_model, ValidateAll, WarmupCosineSchedule,\
-     ReadConfig, softMarginTripletLossMX
+     ReadConfig, IntraLoss
 
 args_do_not_overide = ['data_dir', 'verbose', 'resume_from']
 TR_BASED_MODELS = ['SAFA_TR', 'SAFA_TR50', 'TK_SAFA']
@@ -72,9 +72,9 @@ if __name__ == "__main__":
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
     parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
-    parser.add_argument('--mix', default=False, action='store_true', help='mix-up loss')
+    parser.add_argument('--intra', default=False, action='store_true', help='mix-up loss')
     parser.add_argument('--fp16', default=False, action='store_true', help='mixed precision')
-
+    parser.add_argument('--tkp', default='conv', choices=['pool', 'conv'], help='choose between pool or conv in TKSAFA') 
 
     opt = parser.parse_args()
 
@@ -212,7 +212,11 @@ if __name__ == "__main__":
     elif opt.model == "SAFA_TR50":
         model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     elif opt.model == "TK_SAFA":
-        model = TK_SAFA(top_k=opt.topK, safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+        if opt.tkp == 'conv':
+            TK_Pool = False
+        else:
+            TK_Pool = True
+        model = TK_SAFA(top_k=opt.topK, safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool)
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
@@ -265,11 +269,12 @@ if __name__ == "__main__":
         #     UnFreezeBackBone(model)
 
         logger.info(f"start epoch {epoch}")
+        epoch_triplet_loss = 0
         if is_cf:
-            epoch_triplet_loss = 0
             epoch_cf_loss = 0
-        else:
-            epoch_loss = 0
+        if opt.intra:
+            epoch_it_loss = 0
+
         model.train() # set model to train
         for batch in tqdm(dataloader, disable = opt.verbose):
 
@@ -284,22 +289,22 @@ if __name__ == "__main__":
                 else:
                     sat_global, grd_global = model(sat, grd, is_cf)
                 # soft margin triplet loss
-                if opt.mix == False:
-                    triplet_loss = softMarginTripletLoss(sat_global, grd_global, gamma)
-                else:
-                    triplet_loss = softMarginTripletLossMX(sat_global, grd_global, gamma)
+                triplet_loss = softMarginTripletLoss(sat_global, grd_global, gamma)
+                loss = triplet_loss
+
+                epoch_triplet_loss += loss.item()
                 
                 if is_cf:# calculate CF loss
                     CFLoss_sat= CFLoss(sat_global, fake_sat_global)
                     CFLoss_grd = CFLoss(grd_global, fake_grd_global)
                     CFLoss_total = (CFLoss_sat + CFLoss_grd) / 2.0
-                    loss = triplet_loss + CFLoss_total
-
-                    epoch_triplet_loss += triplet_loss.item()
+                    loss += CFLoss_total
                     epoch_cf_loss += CFLoss_total.item()
-                else:
-                    loss = triplet_loss
-                    epoch_loss += loss.item()
+
+                if opt.intra:
+                    it_loss = IntraLoss(sat_global, grd_global)
+                    loss += it_loss
+                    epoch_it_loss += it_loss.item()
 
             if opt.fp16:
                 scaler.scale(loss).backward()
@@ -322,21 +327,21 @@ if __name__ == "__main__":
 
         logger.info(f"Summary of epoch {epoch}")
         print(f"===============================================")
+        print("---------loss---------")
+        current_triplet_loss = float(epoch_triplet_loss) / float(len(dataloader))
+        print(f"Epoch {epoch} TRI_Loss: {current_triplet_loss}")
+        writer.add_scalar('triplet_loss', current_triplet_loss, epoch)
         if is_cf:
-            current_triplet_loss = float(epoch_triplet_loss) / float(len(dataloader))
             current_cf_loss = float(epoch_cf_loss) / float(len(dataloader))
-            print("---------loss---------")
             print(f"Epoch {epoch} CF_Loss: {current_cf_loss}")
-            print(f"Epoch {epoch} TRI_Loss: {current_triplet_loss}")
-            writer.add_scalar('triplet_loss', current_triplet_loss, epoch)
             writer.add_scalar('cf_loss', current_cf_loss, epoch)
-            print("----------------------")
-        else:
-            epoch_loss = float(epoch_loss) / float(len(dataloader))
-            print("---------loss---------")
-            print(f"Epoch {epoch} Loss {epoch_loss}")
-            writer.add_scalar('loss', epoch_loss, epoch)
-            print("----------------------")
+        
+        if opt.intra:
+            current_intra_loss = float(epoch_it_loss) / float(len(dataloader))
+            print(f"Epoch {epoch} intra loss: {current_intra_loss}")
+            writer.add_scalar('intra_loss', current_intra_loss, epoch)
+            
+        print("----------------------")
 
         # Testing phase
         valSateFeatures = None
