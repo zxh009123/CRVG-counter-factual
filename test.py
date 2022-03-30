@@ -6,14 +6,15 @@ from torch.optim import lr_scheduler
 import torchvision.models as models
 from torch.utils.data import DataLoader
 from dataset.usa_dataset import ImageDataset
-from dataset.act_dataset import TestDataset, TrainDataset
+# from dataset.act_dataset import TestDataset, TrainDataset
+from dataset.act_dataset import ActDataset
 # from SMTL import softMarginTripletLoss
 from tqdm import tqdm
 import os
 import numpy as np
 import argparse
 import json
-
+import scipy.io as sio
 from utils.utils import ReadConfig
 from models.SAFA_TR import SAFA_TR
 from models.BAP import SCN_ResNet
@@ -53,7 +54,8 @@ def GetBestModel(path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
-    parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
+    parser.add_argument("--data_dir", type=str, default='../scratch/', help='dir to the dataset')
+    parser.add_argument('--dataset', default='CVUSA', choices=['CVUSA', 'CVACT'], help='choose between CVUSA or CVACT')
     parser.add_argument("--SAFA_heads", type=int, default=16, help='number of SAFA heads')
     parser.add_argument('--verbose', default=False, action='store_true')
     parser.add_argument("--model", type=str, help='model')
@@ -64,6 +66,8 @@ if __name__ == "__main__":
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
+    parser.add_argument('--validate', default=True, action='store_false', help='perform validate or not')
+    parser.add_argument('--save', default='none', choices=['none', 'mat', 'pt'], help='save extracted features into .mat files or pt files')
 
     opt = parser.parse_args()
 
@@ -109,8 +113,12 @@ if __name__ == "__main__":
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
-    validateloader = DataLoader(TestDataset(data_dir = opt.data_dir, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
-    # validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
+    if opt.dataset == 'CVACT':
+        data_path = os.path.join(opt.data_dir, 'CVACT')
+        validateloader = DataLoader(ActDataset(data_dir = data_path, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation, mode='val'), batch_size=batch_size, shuffle=True, num_workers=8)
+    if opt.dataset == 'CVUSA':
+        data_path = os.path.join(opt.data_dir, 'CVUSA', 'dataset')
+        validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
 
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
@@ -158,6 +166,7 @@ if __name__ == "__main__":
             else:
                 valStreetFeature = torch.cat((valStreetFeature, grd_global.detach()), dim=0)
 
+    if opt.validate:
         valAcc = ValidateAll(valStreetFeature, valSateFeatures)
         print(f"-----------validation result---------------")
         try:
@@ -170,3 +179,11 @@ if __name__ == "__main__":
         except:
             print(valAcc)
         print(f"=================================================")
+
+    #save features
+    if opt.save == 'mat':
+        features_dict = {'sat_global_descriptor':valSateFeatures, 'grd_global_descriptor':valStreetFeature}
+        sio.savemat("descriptors.mat", mdic)
+    elif opt.save == 'pt':
+        torch.save(valSateFeatures, 'sat_global_descriptor.pt')
+        torch.save(valStreetFeature, 'grd_global_descriptor.pt')

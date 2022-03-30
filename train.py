@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 from dataset.usa_dataset import ImageDataset
-from dataset.act_dataset import TestDataset, TrainDataset
+# from dataset.act_dataset import TestDataset, TrainDataset
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -56,12 +56,12 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='_no_aug', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='_4TR_4H', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
-    parser.add_argument("--TR_heads", type=int, default=4, help='number of heads in Transformer')
-    parser.add_argument("--TR_layers", type=int, default=2, help='number of layers in Transformer')
+    parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
+    parser.add_argument("--TR_layers", type=int, default=8, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
