@@ -56,7 +56,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='_newTK', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='_newINTRA', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
@@ -72,9 +72,9 @@ if __name__ == "__main__":
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
     parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
-    parser.add_argument('--intra', default=False, action='store_true', help='mix-up loss')
+    parser.add_argument('--intra', default=False, action='store_true', help='intra loss')
     parser.add_argument('--fp16', default=False, action='store_true', help='mixed precision')
-    parser.add_argument('--tkp', default='conv', choices=['pool', 'conv'], help='choose between pool or conv in TKSAFA') 
+    parser.add_argument('--tkp', default='pool', choices=['pool', 'conv'], help='choose between pool or conv in TKSAFA') 
 
     opt = parser.parse_args()
 
@@ -302,7 +302,7 @@ if __name__ == "__main__":
                     epoch_cf_loss += CFLoss_total.item()
 
                 if opt.intra:
-                    it_loss = IntraLoss(sat_global, grd_global)
+                    it_loss = IntraLoss(sat_global, grd_global, loss_weight=5, hard_topk_ratio=0.4)
                     loss += it_loss
                     epoch_it_loss += it_loss.item()
 
