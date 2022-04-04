@@ -15,7 +15,8 @@ import numpy as np
 import argparse
 import json
 import scipy.io as sio
-from utils.utils import ReadConfig
+from utils.utils import ReadConfig, ValidateAll, validatenp
+
 from models.SAFA_TR import SAFA_TR
 from models.BAP import SCN_ResNet
 from models.SAFA_vgg import SAFA_vgg
@@ -115,10 +116,10 @@ if __name__ == "__main__":
     
     if opt.dataset == 'CVACT':
         data_path = os.path.join(opt.data_dir, 'CVACT')
-        validateloader = DataLoader(ActDataset(data_dir = data_path, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation, mode='val'), batch_size=batch_size, shuffle=True, num_workers=8)
+        validateloader = DataLoader(ActDataset(data_dir = data_path, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation, mode='val'), batch_size=batch_size, shuffle=False, num_workers=8)
     if opt.dataset == 'CVUSA':
         data_path = os.path.join(opt.data_dir, 'CVUSA', 'dataset')
-        validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", is_polar=polar_transformation), batch_size=batch_size, shuffle=True, num_workers=8)
+        validateloader = DataLoader(ImageDataset(data_dir = data_path, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", is_polar=polar_transformation), batch_size=batch_size, shuffle=False, num_workers=8)
 
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
@@ -140,8 +141,12 @@ if __name__ == "__main__":
 
     print("start testing...")
 
-    valSateFeatures = None
-    valStreetFeature = None
+    # valSateFeatures = None
+    # valStreetFeature = None
+
+    sat_global_descriptor = np.zeros([8884, 4096])
+    grd_global_descriptor = np.zeros([8884, 4096])
+    val_i = 0
 
     model.eval()
     with torch.no_grad():
@@ -156,18 +161,23 @@ if __name__ == "__main__":
             # grd_global = F.normalize(grd_global)
 
             #stack features to the container
-            if valSateFeatures == None:
-                valSateFeatures = sat_global.detach()
-            else:
-                valSateFeatures = torch.cat((valSateFeatures, sat_global.detach()), dim=0)
+            # if valSateFeatures == None:
+            #     valSateFeatures = sat_global.detach()
+            # else:
+            #     valSateFeatures = torch.cat((valSateFeatures, sat_global.detach()), dim=0)
 
-            if valStreetFeature == None:
-                valStreetFeature = grd_global.detach()
-            else:
-                valStreetFeature = torch.cat((valStreetFeature, grd_global.detach()), dim=0)
+            # if valStreetFeature == None:
+            #     valStreetFeature = grd_global.detach()
+            # else:
+            #     valStreetFeature = torch.cat((valStreetFeature, grd_global.detach()), dim=0)
 
+            sat_global_descriptor[val_i: val_i + sat_global.shape[0], :] = sat_global.detach().cpu().numpy()
+            grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global.detach().cpu().numpy()
+
+            val_i += sat_global.shape[0]
     if opt.validate:
-        valAcc = ValidateAll(valStreetFeature, valSateFeatures)
+        # valAcc = ValidateAll(valStreetFeature, valSateFeatures)
+        valAcc = validatenp(sat_global_descriptor, grd_global_descriptor)
         print(f"-----------validation result---------------")
         try:
             #print epoch loss

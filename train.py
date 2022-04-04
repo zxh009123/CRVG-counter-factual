@@ -26,7 +26,7 @@ from models.TOPK_SAFA import TK_SAFA
 
 from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
      CFLoss, save_model, ValidateAll, WarmupCosineSchedule,\
-     ReadConfig, IntraLoss
+     ReadConfig, IntraLoss, validatenp
 
 args_do_not_overide = ['data_dir', 'verbose', 'resume_from']
 TR_BASED_MODELS = ['SAFA_TR', 'SAFA_TR50', 'TK_SAFA']
@@ -56,12 +56,12 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='_newINTRA', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='_imp_ns', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
     parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
-    parser.add_argument("--TR_layers", type=int, default=4, help='number of layers in Transformer')
+    parser.add_argument("--TR_layers", type=int, default=8, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
@@ -201,22 +201,26 @@ if __name__ == "__main__":
         batch_size=batch_size, shuffle=True, num_workers=8)
 
     validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
-        batch_size=batch_size, shuffle=True, num_workers=8)
+        batch_size=batch_size, shuffle=False, num_workers=8)
 
     #To be noticed: safa_heads represent k in topk when SAFA_TR in topk mode
     #change SAFA_TR mode in uncomment and comment line 233 to 243 in models/SAFA_TR.py 
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
+        embedding_dims = number_SAFA_heads * 512
     elif opt.model == "SAFA_TR":
         model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+        embedding_dims = number_SAFA_heads * 512
     elif opt.model == "SAFA_TR50":
         model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+        embedding_dims = number_SAFA_heads * 512
     elif opt.model == "TK_SAFA":
         if opt.tkp == 'conv':
             TK_Pool = False
         else:
             TK_Pool = True
         model = TK_SAFA(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool)
+        embedding_dims = opt.topK * 512
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
@@ -302,7 +306,7 @@ if __name__ == "__main__":
                     epoch_cf_loss += CFLoss_total.item()
 
                 if opt.intra:
-                    it_loss = IntraLoss(sat_global, grd_global, loss_weight=5, hard_topk_ratio=0.4)
+                    it_loss = IntraLoss(sat_global, grd_global, loss_weight=5.0, hard_topk_ratio=0.4)
                     loss += it_loss
                     epoch_it_loss += it_loss.item()
 
@@ -344,8 +348,11 @@ if __name__ == "__main__":
         print("----------------------")
 
         # Testing phase
-        valSateFeatures = None
-        valStreetFeature = None
+        # valSateFeatures = None
+        # valStreetFeature = None
+        sat_global_descriptor = np.zeros([8884, embedding_dims])
+        grd_global_descriptor = np.zeros([8884, embedding_dims])
+        val_i = 0
 
         model.eval()
         with torch.no_grad():
@@ -355,17 +362,22 @@ if __name__ == "__main__":
 
                 sat_global, grd_global = model(sat, grd, is_cf=False)
 
-                if valSateFeatures == None:
-                    valSateFeatures = sat_global.detach()
-                else:
-                    valSateFeatures = torch.cat((valSateFeatures, sat_global.detach()), dim=0)
+                # if valSateFeatures == None:
+                #     valSateFeatures = sat_global.detach()
+                # else:
+                #     valSateFeatures = torch.cat((valSateFeatures, sat_global.detach()), dim=0)
 
-                if valStreetFeature == None:
-                    valStreetFeature = grd_global.detach()
-                else:
-                    valStreetFeature = torch.cat((valStreetFeature, grd_global.detach()), dim=0)
+                # if valStreetFeature == None:
+                #     valStreetFeature = grd_global.detach()
+                # else:
+                #     valStreetFeature = torch.cat((valStreetFeature, grd_global.detach()), dim=0)
+                sat_global_descriptor[val_i: val_i + sat_global.shape[0], :] = sat_global.detach().cpu().numpy()
+                grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global.detach().cpu().numpy()
 
-            valAcc = ValidateAll(valStreetFeature, valSateFeatures)
+                val_i += sat_global.shape[0]
+
+            # valAcc = ValidateAll(valStreetFeature, valSateFeatures)
+            valAcc = validatenp(sat_global_descriptor, grd_global_descriptor)
             logger.info("validation result")
             print(f"------------------------------------")
             try:

@@ -53,11 +53,11 @@ class LambdaLR():
         self.decay_start_epoch = decay_start_epoch
 
     def step(self, epoch):
-        return 1.0 - max(0, epoch + self.offset - self.decay_start_epoch)/(self.n_epochs - self.decay_start_epoch)
+        return 1.0 - max(0.0, epoch + self.offset - self.decay_start_epoch)/(self.n_epochs - self.decay_start_epoch)
 
 
-def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=1.0):
-    dists = 2 - 2 * torch.matmul(sate_vecs, pano_vecs.permute(1, 0))  # Pairwise matches within batch
+def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10.0, hard_topk_ratio=1.0):
+    dists = 2.0 - 2.0 * torch.matmul(sate_vecs, pano_vecs.permute(1, 0))  # Pairwise matches within batch
     pos_dists = torch.diag(dists)
     N = len(pos_dists)
     diag_ids = np.arange(N)
@@ -65,45 +65,45 @@ def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=
 
     # Match from satellite to street pano
     triplet_dist_s2p = pos_dists.unsqueeze(1) - dists
-    loss_s2p = torch.log(1 + torch.exp(loss_weight * triplet_dist_s2p))
-    loss_s2p[diag_ids, diag_ids] = 0  # Ignore diagnal losses
+    loss_s2p = torch.log(1.0 + torch.exp(loss_weight * triplet_dist_s2p))
+    loss_s2p[diag_ids, diag_ids] = 0.0  # Ignore diagnal losses
 
     if hard_topk_ratio < 1.0:  # Hard negative mining
         loss_s2p = loss_s2p.view(-1)
         loss_s2p, s2p_ids = torch.topk(loss_s2p, num_hard_triplets)
-    loss_s2p = loss_s2p.sum() / num_hard_triplets
+    loss_s2p = loss_s2p.sum() / float(num_hard_triplets)
 
     # Match from street pano to satellite
     triplet_dist_p2s = pos_dists - dists
-    loss_p2s = torch.log(1 + torch.exp(loss_weight * triplet_dist_p2s))
-    loss_p2s[diag_ids, diag_ids] = 0  # Ignore diagnal losses
+    loss_p2s = torch.log(1.0 + torch.exp(loss_weight * triplet_dist_p2s))
+    loss_p2s[diag_ids, diag_ids] = 0.0  # Ignore diagnal losses
 
     if hard_topk_ratio < 1.0:  # Hard negative mining
         loss_p2s = loss_p2s.view(-1)
         loss_p2s, p2s_ids = torch.topk(loss_p2s, num_hard_triplets)
-    loss_p2s = loss_p2s.sum() / num_hard_triplets
+    loss_p2s = loss_p2s.sum() / float(num_hard_triplets)
     # Total loss
     loss = (loss_s2p + loss_p2s) / 2.0
     return loss
 
-def IntraLoss(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=1.0):
+def IntraLoss(sate_vecs, pano_vecs, loss_weight=10.0, hard_topk_ratio=1.0):
     # satllite pairwise
-    dists_sat = 2 - 2 * torch.matmul(sate_vecs, sate_vecs.permute(1, 0))
+    dists_sat = 2.0 - 2.0 * torch.matmul(sate_vecs, sate_vecs.permute(1, 0))
     pos_dists_sat = torch.diag(dists_sat)
     N = len(pos_dists_sat)
     diag_ids = np.arange(N)
     num_hard_triplets = int(hard_topk_ratio * (N * (N - 1))) if hard_topk_ratio < 1.0 else N * (N - 1)
 
     triplet_dist_sat = pos_dists_sat - dists_sat
-    loss_sat = torch.log(1 + torch.exp(loss_weight * triplet_dist_sat))
-    loss_sat[diag_ids, diag_ids] = 0  # Ignore diagnal losses
+    loss_sat = torch.log(1.0 + torch.exp(loss_weight * triplet_dist_sat))
+    loss_sat[diag_ids, diag_ids] = 0.0  # Ignore diagnal losses
 
     if hard_topk_ratio < 1.0:  # Hard negative mining
         loss_sat = loss_sat.view(-1)
         loss_sat, p2s_ids = torch.topk(loss_sat, num_hard_triplets)
-    loss_sat = loss_sat.sum() / num_hard_triplets
+    loss_sat = loss_sat.sum() / float(num_hard_triplets)
 
-    dists_pano = 2 - 2 * torch.matmul(pano_vecs, pano_vecs.permute(1, 0))
+    dists_pano = 2.0 - 2.0 * torch.matmul(pano_vecs, pano_vecs.permute(1, 0))
     pos_dists_pano = torch.diag(dists_pano)
     N = len(pos_dists_pano)
     diag_ids = np.arange(N)
@@ -111,20 +111,20 @@ def IntraLoss(sate_vecs, pano_vecs, loss_weight=10, hard_topk_ratio=1.0):
 
     # pano pairwise
     triplet_dist_pano = pos_dists_pano - dists_pano
-    loss_pano = torch.log(1 + torch.exp(loss_weight * triplet_dist_pano))
-    loss_pano[diag_ids, diag_ids] = 0  # Ignore diagnal losses
+    loss_pano = torch.log(1.0 + torch.exp(loss_weight * triplet_dist_pano))
+    loss_pano[diag_ids, diag_ids] = 0.0  # Ignore diagnal losses
 
     if hard_topk_ratio < 1.0:  # Hard negative mining
         loss_pano = loss_pano.view(-1)
         loss_pano, p2s_ids = torch.topk(loss_pano, num_hard_triplets)
-    loss_pano = loss_pano.sum() / num_hard_triplets
+    loss_pano = loss_pano.sum() / float(num_hard_triplets)
 
     loss = (loss_pano + loss_sat) / 2.0
     return loss
 
 def CFLoss(vecs, hat_vecs, loss_weight=5.0):
 
-    dists = 2 * torch.matmul(vecs, hat_vecs.permute(1, 0)) - 2 
+    dists = 2.0 * torch.matmul(vecs, hat_vecs.permute(1, 0)) - 2.0
     cf_dists = torch.diag(dists)
     loss = torch.log(1.0 + torch.exp(loss_weight * cf_dists))
 
@@ -165,13 +165,32 @@ def ValidateOne(distArray, topK):
     return acc / dataAmount
 
 def ValidateAll(streetFeatures, satelliteFeatures):
-    distArray = 2 - 2 * torch.matmul(satelliteFeatures, torch.transpose(streetFeatures, 0, 1))
+    distArray = 2.0 - 2.0 * torch.matmul(satelliteFeatures, torch.transpose(streetFeatures, 0, 1))
     topOnePercent = int(distArray.shape[0] * 0.01) + 1
-    valAcc = torch.zeros((1, topOnePercent))
+    valAcc = torch.zeros((1, topOnePercent), dtype=torch.float)
     for i in range(topOnePercent):
         valAcc[0,i] = ValidateOne(distArray, i)
     
     return valAcc
+
+def validatenp(sat_global_descriptor, grd_global_descriptor):
+    dist_array = 2.0 - 2.0 * np.matmul(sat_global_descriptor, grd_global_descriptor.T)
+    
+    top1_percent = int(dist_array.shape[0] * 0.01) + 1
+    val_accuracy = np.zeros((1, top1_percent))
+    for i in range(top1_percent):
+        # val_accuracy[0, i] = validate(dist_array, i)
+        accuracy = 0.0
+        data_amount = 0.0
+        for k in range(dist_array.shape[0]):
+            gt_dist = dist_array[k,k]
+            prediction = np.sum(dist_array[:, k] < gt_dist)
+            if prediction < i:
+                accuracy += 1.0
+            data_amount += 1.0
+        accuracy /= data_amount
+        val_accuracy[0, i] = accuracy
+    return val_accuracy
 
 if __name__ == "__main__":
     a = torch.rand(10, 4096)
