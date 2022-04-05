@@ -56,7 +56,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='_imp_ns', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='_TK1024', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
@@ -220,7 +220,7 @@ if __name__ == "__main__":
         else:
             TK_Pool = True
         model = TK_SAFA(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool)
-        embedding_dims = opt.topK * 512
+        embedding_dims = 1024
     elif opt.model == "SCN_ResNet":
         model = SCN_ResNet()
     else:
@@ -306,7 +306,7 @@ if __name__ == "__main__":
                     epoch_cf_loss += CFLoss_total.item()
 
                 if opt.intra:
-                    it_loss = IntraLoss(sat_global, grd_global, loss_weight=5.0, hard_topk_ratio=0.4)
+                    it_loss = IntraLoss(sat_global, grd_global, loss_weight=5.0, hard_topk_ratio=1.0)
                     loss += it_loss
                     epoch_it_loss += it_loss.item()
 
