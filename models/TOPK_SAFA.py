@@ -90,8 +90,8 @@ class SA_TR_TOPK(nn.Module):
     def __init__(self, d_model=256, top_k = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
         #positional embedding
-        # self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=True)
-        self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=False)
+        self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=True)
+        # self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=False)
         # Transformer
         encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
         layer_norm = nn.LayerNorm(d_model)
@@ -107,16 +107,21 @@ class SA_TOPK(nn.Module):
     def __init__(self, in_dim, top_k=100, tr_heads=8, tr_layers=6, dropout = 0.3, is_TKPool = True):
         super().__init__()
         self.topk = top_k
-        #in_dim = H*W
-        hid_dim = in_dim // 2
+        projection_dim = 1024
+        # hid_dim = in_dim // 2
 
         self.is_TKPool = is_TKPool
 
         if not self.is_TKPool:
+            # 512 is the output channel of Res34
+            # 2048 is the output channel of Res34
             self.conv_pool = torch.nn.Conv2d(512, self.topk, 3, stride=1, padding=1, bias=True)
-        # 512 is the output channel of Res34
-        # 2048 is the output channel of Res34
-        self.safa_tr = SA_TR_TOPK(d_model=in_dim, top_k = top_k, nhead=tr_heads, nlayers=tr_layers, dropout = dropout, d_hid=hid_dim)
+            
+        linear = torch.empty(in_dim, projection_dim)
+        nn.init.normal_(linear, mean=0.0, std=0.005)
+        self.linear = torch.nn.Parameter(linear)
+
+        self.safa_tr = SA_TR_TOPK(d_model=projection_dim, top_k = top_k, nhead=tr_heads, nlayers=tr_layers, dropout = dropout, d_hid=projection_dim)
 
 
     def forward(self, x, is_cf):
@@ -124,42 +129,51 @@ class SA_TOPK(nn.Module):
 
         if self.is_TKPool:
             x = x.view(batch, channel, -1)
-            mask, _ = torch.topk(x, self.topk, dim=1, sorted=True)
+            x, _ = torch.topk(x, self.topk, dim=1, sorted=True)
         else:
-            mask = self.conv_pool(x)
-            x = x.view(batch, channel, -1)
-            mask = mask.view(batch, self.topk, -1)
+            x = self.conv_pool(x)
+            x = x.view(batch, self.topk, -1)
+
+
+        x = torch.einsum("bci, id -> bcd", x, self.linear)
+
+        x = self.safa_tr(x)
+
+        out = x[:, 0]
+
+        return F.normalize(out, p=2, dim=1)
+        
 
 
         # hardtanh for mapping the value from -1 to 1
-        mask = F.hardtanh(mask)
+        # mask = F.hardtanh(mask)
 
-        feat_dim =mask.shape[2]
+        # feat_dim =mask.shape[2]
 
-        if is_cf:
-            mask = self.safa_tr(mask)
-            mask = mask.permute(0,2,1)
+        # if is_cf:
+        #     mask = self.safa_tr(mask)
+        #     mask = mask.permute(0,2,1)
 
-            feature = torch.matmul(x, mask).view(batch, -1)
-            feature = F.normalize(feature, p=2, dim=1)
+        #     feature = torch.matmul(x, mask).view(batch, -1)
+        #     feature = F.normalize(feature, p=2, dim=1)
 
-            #random generate fake masks
-            # Remaining steps are similar as previous
-            fake_mask = torch.zeros_like(mask).uniform_(-1, 1)
-            fake_feature = torch.matmul(x, fake_mask).view(batch, -1)
-            fake_feature = F.normalize(fake_feature, p=2, dim=1)
+        #     #random generate fake masks
+        #     # Remaining steps are similar as previous
+        #     fake_mask = torch.zeros_like(mask).uniform_(-1, 1)
+        #     fake_feature = torch.matmul(x, fake_mask).view(batch, -1)
+        #     fake_feature = F.normalize(fake_feature, p=2, dim=1)
 
-            return feature, fake_feature
-        else: # Similar to previous
-            # features = torch.matmul(x, mask).reshape(batch, top_k, -1)
-            mask = self.safa_tr(mask)
-            mask = mask.permute(0,2,1)
+        #     return feature, fake_feature
+        # else: # Similar to previous
+        #     # features = torch.matmul(x, mask).reshape(batch, top_k, -1)
+        #     mask = self.safa_tr(mask)
+        #     mask = mask.permute(0,2,1)
 
-            feature = torch.matmul(x, mask).view(batch, -1)
-            feature = F.normalize(feature, p=2, dim=1)
+        #     feature = torch.matmul(x, mask).view(batch, -1)
+        #     feature = F.normalize(feature, p=2, dim=1)
 
 
-            return feature
+        #     return feature
 
 class TK_SAFA(nn.Module):
     def __init__(self, top_k=8, tr_heads=8, tr_layers=6, dropout = 0.3, is_polar=True, pos='learn_pos', TK_Pool=True):
@@ -208,7 +222,7 @@ class TK_SAFA(nn.Module):
             return sat_feature, grd_feature
 
 if __name__ == "__main__":
-    model = TK_SAFA(top_k=8, tr_heads=4, tr_layers=2, dropout = 0.3, pos = 'learn_pos', is_polar=True, TK_Pool=False)
+    model = TK_SAFA(top_k=10, tr_heads=4, tr_layers=2, dropout = 0.3, pos = 'learn_pos', is_polar=True, TK_Pool=False)
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)
