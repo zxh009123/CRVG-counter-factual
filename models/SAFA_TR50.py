@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
+from models.TR import TransformerEncoder, TransformerEncoderLayer
 import math
 
 class LearnablePE(nn.Module):
@@ -91,7 +91,7 @@ class SA_TR(nn.Module):
 class ResNet50(nn.Module):
     def __init__(self):
         super().__init__()
-        net = models.resnet50(pretrained=True)
+        net = models.resnet50(local_file='resnet50-0676ba61.pth')
 
         layers = list(net.children())[:3]
         layers_end = list(net.children())[4:-2]
