@@ -114,14 +114,14 @@ class SA_TOPK(nn.Module):
 
         if not self.is_TKPool:
             # 512 is the output channel of Res34
-            # 2048 is the output channel of Res34
+            # 2048 is the output channel of Res50
             self.conv_pool = torch.nn.Conv2d(512, self.topk, 3, stride=1, padding=1, bias=True)
             
         linear = torch.empty(in_dim, projection_dim)
         nn.init.normal_(linear, mean=0.0, std=0.005)
         self.linear = torch.nn.Parameter(linear)
 
-        self.safa_tr = SA_TR_TOPK(d_model=projection_dim, top_k = top_k, nhead=tr_heads, nlayers=tr_layers, dropout = dropout, d_hid=projection_dim)
+        self.safa_tr = SA_TR_TOPK(d_model=projection_dim, top_k = top_k, nhead=tr_heads, nlayers=tr_layers, dropout = dropout, d_hid=2048)
 
 
     def forward(self, x, is_cf):
@@ -175,7 +175,7 @@ class SA_TOPK(nn.Module):
 
         #     return feature
 
-class TK_SAFA(nn.Module):
+class TK_FFusion(nn.Module):
     def __init__(self, top_k=8, tr_heads=8, tr_layers=6, dropout = 0.3, is_polar=True, pos='learn_pos', TK_Pool=True):
         super().__init__()
 
@@ -222,7 +222,7 @@ class TK_SAFA(nn.Module):
             return sat_feature, grd_feature
 
 if __name__ == "__main__":
-    model = TK_SAFA(top_k=10, tr_heads=4, tr_layers=2, dropout = 0.3, pos = 'learn_pos', is_polar=True, TK_Pool=False)
+    model = TK_FFusion(top_k=10, tr_heads=4, tr_layers=2, dropout = 0.3, pos = 'learn_pos', is_polar=True, TK_Pool=False)
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)

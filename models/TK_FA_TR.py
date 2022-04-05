@@ -73,17 +73,17 @@ class Transformer(nn.Module):
 
 class SA_TR(nn.Module):
 
-    def __init__(self, d_model=256, safa_heads = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
+    def __init__(self, d_model=256, max_len = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
 
-        self.pos_encoder = SA_PE(d_model, max_len=safa_heads, dropout=dropout)
+        self.pos_encoder = LearnablePE(d_model, max_len=max_len, dropout=dropout)
         encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
         layer_norm = nn.LayerNorm(d_model)
         self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = nlayers, norm=layer_norm)
 
 
-    def forward(self, src, pos):
-        src = self.pos_encoder(src, pos)
+    def forward(self, src):
+        src = self.pos_encoder(src)
         output = self.transformer_encoder(src)
         return output
 
@@ -100,61 +100,69 @@ class ResNet34(nn.Module):
         return self.layers(x)
 
 class SA(nn.Module):
-    def __init__(self, in_dim, safa_heads=8, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos'):
+    def __init__(self, in_dim, topk=8, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, project_dim=512, pos = 'learn_pos', is_TKPool=False):
         super().__init__()
 
-        hid_dim = in_dim // 2
-        self.w1, self.b1 = self.init_weights_(in_dim, hid_dim, safa_heads)
-        self.w2, self.b2 = self.init_weights_(hid_dim, in_dim, safa_heads)
+        self.topk = topk
+
+        self.is_TKPool = is_TKPool
+        if not self.is_TKPool:
+            # 512 is the output channel of Res34
+            # 2048 is the output channel of Res50
+            self.conv_pool = torch.nn.Conv2d(512, self.topk, 3, stride=1, padding=1, bias=True)
+
+        self.project_dim = project_dim
+        self.w1, self.b1 = self.init_weights_(self.topk, in_dim, self.project_dim)
+        self.w2, self.b2 = self.init_weights_(self.topk, self.project_dim, in_dim)
         self.pos = pos
         if pos == 'learn_pos':
-            self.safa_tr = SA_TR(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
+            self.safa_tr = SA_TR(d_model=self.project_dim, max_len=self.topk, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
         else:
-            self.safa_tr = Transformer(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
+            self.safa_tr = Transformer(d_model=self.project_dim, max_len=self.topk, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
 
-    def init_weights_(self, din, dout, dnum):
-        # weight = torch.empty(din, dout, dnum)
-        weight = torch.empty(din, dnum, dout)
+    def init_weights_(self, channel, din, dout):
+        weight = torch.empty(channel, din, dout)
         nn.init.normal_(weight, mean=0.0, std=0.005)
-        # bias = torch.empty(1, dout, dnum)
-        bias = torch.empty(1, dnum, dout)
+        bias = torch.empty(1, channel, dout)
         nn.init.constant_(bias, val=0.1)
         weight = torch.nn.Parameter(weight)
         bias = torch.nn.Parameter(bias)
         return weight, bias
 
     def forward(self, x):
-        channel = x.shape[1]
-        mask, pos = x.max(1)
-
-        pos_normalized = pos / channel
-
-        mask = torch.einsum('bi, idj -> bdj', mask, self.w1) + self.b1
-
-        if self.pos == 'learn_pos':
-            mask = self.safa_tr(mask, pos_normalized)
+        batch, channel = x.shape[0], x.shape[1]
+        
+        if self.is_TKPool:
+            x = x.view(batch, channel, -1)
+            mask, _ = torch.topk(x, self.topk, dim=1, sorted=True)
         else:
-            mask = self.safa_tr(mask)
 
-        mask = torch.einsum('bdj, jdi -> bdi', mask, self.w2) + self.b2
+            mask = self.conv_pool(x)
+            mask = mask.view(batch, self.topk, -1)
+
+        mask = torch.einsum('bik, ikj -> bij', mask, self.w1) + self.b1
+
+        mask = self.safa_tr(mask)
+
+        mask = torch.einsum('bij, ijk -> bik', mask, self.w2) + self.b2
         mask = mask.permute(0,2,1)
 
         return mask
 
 
 
-class SAFA_TR(nn.Module):
-    def __init__(self, safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos'):
+class TK_FA_TR(nn.Module):
+    def __init__(self, topk=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos', TKPool=False):
         super().__init__()
 
         self.backbone_grd = ResNet34()
         self.backbone_sat = ResNet34()
 
-        self.spatial_aware_grd = SA(in_dim=336, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
+        self.spatial_aware_grd = SA(in_dim=336, topk=topk, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, project_dim=512, pos=pos, is_TKPool=TKPool)
         if is_polar:
-            self.spatial_aware_sat = SA(in_dim=336, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
+            self.spatial_aware_sat = SA(in_dim=336, topk=topk, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, project_dim=512, pos=pos, is_TKPool=TKPool)
         else:
-            self.spatial_aware_sat = SA(in_dim=256, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
+            self.spatial_aware_sat = SA(in_dim=256, topk=topk, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, project_dim=512, pos=pos, is_TKPool=TKPool)
 
 
     def forward(self, sat, grd, is_cf):
@@ -163,10 +171,12 @@ class SAFA_TR(nn.Module):
         sat_x = self.backbone_sat(sat)
         grd_x = self.backbone_grd(grd)
 
-        sat_x = sat_x.view(b, sat_x.shape[1], -1)
-        grd_x = grd_x.view(b, grd_x.shape[1], -1)
         sat_sa = self.spatial_aware_sat(sat_x)
         grd_sa = self.spatial_aware_grd(grd_x)
+
+        sat_x = sat_x.view(b, sat_x.shape[1], -1)
+        grd_x = grd_x.view(b, grd_x.shape[1], -1)
+
         sat_sa = F.hardtanh(sat_sa)
         grd_sa = F.hardtanh(grd_sa)
         if is_cf:
@@ -196,7 +206,7 @@ class SAFA_TR(nn.Module):
             return sat_global, grd_global
 
 if __name__ == "__main__":
-    model = SAFA_TR(safa_heads=12, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True)
+    model = TK_FA_TR(topk=8, tr_heads=4, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True, TKPool=False)
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)

@@ -20,7 +20,6 @@ import json
 
 from models.SAFA_TR import SAFA_TR
 from models.SAFA_TR50 import SAFA_TR50
-from models.BAP import SCN_ResNet
 from models.SAFA_vgg import SAFA_vgg
 from models.TOPK_SAFA import TK_SAFA
 
@@ -221,8 +220,6 @@ if __name__ == "__main__":
             TK_Pool = True
         model = TK_SAFA(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool)
         embedding_dims = 1024
-    elif opt.model == "SCN_ResNet":
-        model = SCN_ResNet()
     else:
         raise RuntimeError(f"model {opt.model} is not implemented")
     model = nn.DataParallel(model)
@@ -232,9 +229,6 @@ if __name__ == "__main__":
     if opt.model == "SAFA_vgg":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay)
         lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
-    elif opt.model == "SCN_ResNet":
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay)
-        lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=LambdaLR(number_of_epoch, 0, 30).step)
     elif opt.model in TR_BASED_MODELS:
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay, eps=1e-6)
         # lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.97).step)
