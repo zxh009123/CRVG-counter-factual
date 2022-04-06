@@ -21,14 +21,16 @@ import json
 from models.SAFA_TR import SAFA_TR
 from models.SAFA_TR50 import SAFA_TR50
 from models.SAFA_vgg import SAFA_vgg
-from models.TOPK_SAFA import TK_SAFA
+from models.TK_SAFF import TK_SAFF
+from models.TK_FFusion import TK_FFusion
+from models.TK_FA_TR import TK_FA_TR
 
 from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
      CFLoss, save_model, ValidateAll, WarmupCosineSchedule,\
      ReadConfig, IntraLoss, validatenp
 
 args_do_not_overide = ['data_dir', 'verbose', 'resume_from']
-TR_BASED_MODELS = ['SAFA_TR', 'SAFA_TR50', 'TK_SAFA']
+TR_BASED_MODELS = ['SAFA_TR', 'SAFA_TR50', 'TK_SAFF', 'TK_FFusion', 'TK_FA_TR']
 
 def GetBestModel(path):
     all_files = os.listdir(path)
@@ -74,6 +76,7 @@ if __name__ == "__main__":
     parser.add_argument('--intra', default=False, action='store_true', help='intra loss')
     parser.add_argument('--fp16', default=False, action='store_true', help='mixed precision')
     parser.add_argument('--tkp', default='pool', choices=['pool', 'conv'], help='choose between pool or conv in TKSAFA') 
+    parser.add_argument("--embed_dim", type=int, default=768, help='learned dim for TK_SAFF or TK_FF')
 
     opt = parser.parse_args()
 
@@ -213,13 +216,21 @@ if __name__ == "__main__":
     elif opt.model == "SAFA_TR50":
         model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
         embedding_dims = number_SAFA_heads * 512
-    elif opt.model == "TK_SAFA":
+    elif opt.model == "TK_SAFF" or opt.model == "TK_FFusion" or opt.model == "TK_FA_TR":
         if opt.tkp == 'conv':
             TK_Pool = False
         else:
             TK_Pool = True
-        model = TK_SAFA(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool)
-        embedding_dims = 1024
+
+        if opt.model == "TK_SAFF":
+            model = TK_SAFF(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
+            embedding_dims = opt.embed_dim
+        elif opt.model == "TK_FFusion":
+            TK_FFusion(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, pos = pos, is_polar=polar_transformation, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
+            embedding_dims = opt.embed_dim
+        elif opt.model == "TK_FA_TR":
+            TK_FA_TR(topk=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=2048, pos = 'learn_pos', is_polar=polar_transformation, TKPool=TK_Pool)
+            embedding_dims = opt.topK * 512
     else:
         raise RuntimeError(f"model {opt.model} is not implemented")
     model = nn.DataParallel(model)

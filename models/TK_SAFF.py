@@ -104,7 +104,7 @@ class SA_TR_TOPK(nn.Module):
         return output
 
 class SA_TOPK(nn.Module):
-    def __init__(self, in_dim, top_k=100, tr_heads=8, tr_layers=6, dropout = 0.3, is_TKPool = True):
+    def __init__(self, in_dim, top_k=100, tr_heads=8, tr_layers=6, dropout = 0.3, is_TKPool = True, embed_dim = 768):
         super().__init__()
         self.topk = top_k
         hid_dim = in_dim // 2
@@ -112,7 +112,7 @@ class SA_TOPK(nn.Module):
         self.is_TKPool = is_TKPool
 
         #dim of output tensor
-        n_channel = 768
+        n_channel = embed_dim
 
         self.channel_conv = torch.nn.Conv2d(512, n_channel, 1)
 
@@ -178,17 +178,17 @@ class SA_TOPK(nn.Module):
             return feature, fake_feature
         else: # Similar to previous
             # features = torch.matmul(x, mask).reshape(batch, top_k, -1)
-            mask = self.safa_tr(mask)
-            mask = mask.permute(0,2,1)
+            features = torch.matmul(mask, x)
 
-            feature = torch.matmul(x, mask).view(batch, -1)
+            features = self.safa_tr(features)
+
+            feature = features[:, 0]
             feature = F.normalize(feature, p=2, dim=1)
 
-
-        #     return feature
+            return feature
 
 class TK_SAFF(nn.Module):
-    def __init__(self, top_k=8, tr_heads=8, tr_layers=6, dropout = 0.3, is_polar=True, pos='learn_pos', TK_Pool=True):
+    def __init__(self, top_k=8, tr_heads=8, tr_layers=6, dropout = 0.3, is_polar=True, pos='learn_pos', TK_Pool=True, embed_dim=768):
         super().__init__()
 
         #res34
@@ -212,11 +212,14 @@ class TK_SAFF(nn.Module):
         #     in_dim_grd = 336
 
 
-        self.spatial_aware_grd = SA_TOPK(in_dim=in_dim_grd, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool)
+        self.spatial_aware_grd = SA_TOPK(in_dim=in_dim_grd, top_k=top_k, tr_heads=tr_heads,\
+             tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
         if is_polar:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool)
+            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads,\
+                 tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
         else:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool)
+            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads,\
+                 tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
 
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
@@ -234,11 +237,11 @@ class TK_SAFF(nn.Module):
             return sat_feature, grd_feature
 
 if __name__ == "__main__":
-    model = TK_SAFF(top_k=10, tr_heads=4, tr_layers=2, dropout = 0.3, pos = 'learn_pos', is_polar=True, TK_Pool=True)
+    model = TK_SAFF(top_k=8, tr_heads=4, tr_layers=2, dropout = 0.3, pos = 'learn_pos', is_polar=True, TK_Pool=False, embed_dim=768)
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)
-    result = model(sat, grd, True)
+    result = model(sat, grd, False)
     for i in result:
         print(i.shape)
 

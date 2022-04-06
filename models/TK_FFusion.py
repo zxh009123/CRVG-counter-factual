@@ -104,10 +104,10 @@ class SA_TR_TOPK(nn.Module):
         return output
 
 class SA_TOPK(nn.Module):
-    def __init__(self, in_dim, top_k=100, tr_heads=8, tr_layers=6, dropout = 0.3, is_TKPool = True):
+    def __init__(self, in_dim, top_k=100, tr_heads=8, tr_layers=6, dropout = 0.3, is_TKPool = True, embed_dim=768):
         super().__init__()
         self.topk = top_k
-        projection_dim = 1024
+        projection_dim = embed_dim
         # hid_dim = in_dim // 2
 
         self.is_TKPool = is_TKPool
@@ -176,7 +176,7 @@ class SA_TOPK(nn.Module):
         #     return feature
 
 class TK_FFusion(nn.Module):
-    def __init__(self, top_k=8, tr_heads=8, tr_layers=6, dropout = 0.3, is_polar=True, pos='learn_pos', TK_Pool=True):
+    def __init__(self, top_k=8, tr_heads=8, tr_layers=6, dropout = 0.3, is_polar=True, pos='learn_pos', TK_Pool=True, embed_dim=768):
         super().__init__()
 
         #res34
@@ -200,11 +200,11 @@ class TK_FFusion(nn.Module):
         #     in_dim_grd = 336
 
 
-        self.spatial_aware_grd = SA_TOPK(in_dim=in_dim_grd, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool)
+        self.spatial_aware_grd = SA_TOPK(in_dim=in_dim_grd, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
         if is_polar:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool)
+            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
         else:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool)
+            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
 
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
@@ -212,17 +212,12 @@ class TK_FFusion(nn.Module):
         sat_x = self.backbone_sat(sat)
         grd_x = self.backbone_grd(grd)
 
-        if is_cf:
-            sat_feature, fake_sat_feature = self.spatial_aware_sat(sat_x, is_cf=True)
-            grd_feature, fake_grd_feature = self.spatial_aware_grd(grd_x, is_cf=True)
-            return sat_feature, grd_feature, fake_sat_feature, fake_grd_feature
-        else:
-            sat_feature = self.spatial_aware_sat(sat_x, is_cf=False)
-            grd_feature = self.spatial_aware_grd(grd_x, is_cf=False)
-            return sat_feature, grd_feature
+        sat_feature = self.spatial_aware_sat(sat_x, is_cf=False)
+        grd_feature = self.spatial_aware_grd(grd_x, is_cf=False)
+        return sat_feature, grd_feature
 
 if __name__ == "__main__":
-    model = TK_FFusion(top_k=10, tr_heads=4, tr_layers=2, dropout = 0.3, pos = 'learn_pos', is_polar=True, TK_Pool=False)
+    model = TK_FFusion(top_k=10, tr_heads=4, tr_layers=2, dropout = 0.3, pos = 'learn_pos', is_polar=True, TK_Pool=False, embed_dim=4096)
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)

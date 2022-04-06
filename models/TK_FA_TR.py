@@ -210,7 +210,7 @@ if __name__ == "__main__":
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)
-    result = model(sat, grd, True)
+    result = model(sat, grd, False)
     for i in result:
         print(i.shape)
 
