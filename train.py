@@ -6,6 +6,7 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 from dataset.usa_dataset import ImageDataset
 # from dataset.act_dataset import TestDataset, TrainDataset
+from dataset.act_dataset import ActDataset
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -57,8 +58,9 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='_TK1024', help='name of the model at the end')
-    parser.add_argument("--data_dir", type=str, default='../scratch/CVUSA/dataset/', help='dir to the dataset')
+    parser.add_argument("--save_suffix", type=str, default='_TK_FA_TR', help='name of the model at the end')
+    parser.add_argument("--data_dir", type=str, default='../scratch', help='dir to the dataset')
+    parser.add_argument('--dataset', default='CVUSA', choices=['CVUSA', 'CVACT'], help='which dataset to use') 
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
     parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
@@ -77,6 +79,7 @@ if __name__ == "__main__":
     parser.add_argument('--fp16', default=False, action='store_true', help='mixed precision')
     parser.add_argument('--tkp', default='pool', choices=['pool', 'conv'], help='choose between pool or conv in TKSAFA') 
     parser.add_argument("--embed_dim", type=int, default=768, help='learned dim for TK_SAFF or TK_FF')
+    parser.add_argument("--project_dim", type=int, default=168, help='Input dim in transformer of TK_FA_TR')
 
     opt = parser.parse_args()
 
@@ -100,7 +103,6 @@ if __name__ == "__main__":
     number_SAFA_heads = opt.SAFA_heads
     gamma = opt.gamma
     is_cf = opt.cf
-    dataset_name = "CVUSA"
 
     hyper_parameter_dict = vars(opt)
     
@@ -137,7 +139,7 @@ if __name__ == "__main__":
     ts = calendar.timegm(gmt)
 
     if opt.resume_from == 'None':
-        save_name = f"{ts}_{opt.model}_{dataset_name}_{is_cf}_{pos}_{polar_transformation}_{opt.save_suffix}"
+        save_name = f"{ts}_{opt.model}_{opt.dataset}_{is_cf}_{pos}_{polar_transformation}_{opt.save_suffix}"
         print("save_name : ", save_name)
         if not os.path.exists(save_name):
             os.makedirs(save_name)
@@ -199,12 +201,18 @@ if __name__ == "__main__":
     #dataloader now only support CVUSA
     # TODO: add support to CVACT
 
-    dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
-        batch_size=batch_size, shuffle=True, num_workers=8)
+    if opt.dataset == "CVUSA":
+        dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
+            batch_size=batch_size, shuffle=True, num_workers=8)
 
-    validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
-        batch_size=batch_size, shuffle=False, num_workers=8)
+        validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
+            batch_size=batch_size, shuffle=False, num_workers=8)
+    elif opt.dataset == "CVACT":
+        dataloader = DataLoader(ActDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
+            batch_size=batch_size, shuffle=True, num_workers=8)
 
+        validateloader = DataLoader(ActDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
+            batch_size=batch_size, shuffle=False, num_workers=8)
     #To be noticed: safa_heads represent k in topk when SAFA_TR in topk mode
     #change SAFA_TR mode in uncomment and comment line 233 to 243 in models/SAFA_TR.py 
     if opt.model == "SAFA_vgg":
@@ -226,10 +234,10 @@ if __name__ == "__main__":
             model = TK_SAFF(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
             embedding_dims = opt.embed_dim
         elif opt.model == "TK_FFusion":
-            TK_FFusion(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, pos = pos, is_polar=polar_transformation, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
+            model = TK_FFusion(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, pos = pos, is_polar=polar_transformation, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
             embedding_dims = opt.embed_dim
         elif opt.model == "TK_FA_TR":
-            TK_FA_TR(topk=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=2048, pos = 'learn_pos', is_polar=polar_transformation, TKPool=TK_Pool)
+            model = TK_FA_TR(topk=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=2048, pos = 'learn_pos', is_polar=polar_transformation, TKPool=TK_Pool, project_dim=opt.project_dim)
             embedding_dims = opt.topK * 512
     else:
         raise RuntimeError(f"model {opt.model} is not implemented")

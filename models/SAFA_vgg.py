@@ -41,47 +41,47 @@ class SA(nn.Module):
 class SAFA_vgg(nn.Module):
     def __init__(self, safa_heads = 1, is_polar=True):
         super().__init__()
-        # self.backbone_grd = models.vgg16(pretrained=True)
-        # self.backbone_sat = models.vgg16(pretrained=True)
+        self.backbone_grd = models.vgg16(pretrained=True)
+        self.backbone_sat = models.vgg16(pretrained=True)
 
-        # feats_list = list(self.backbone_grd.features)
-        # feats_list = feats_list[:-1]
-        # new_feats_list = []
-        # for i in range(len(feats_list)):
-        #     new_feats_list.append(feats_list[i])
-        #     if isinstance(feats_list[i], nn.Conv2d) and i > 14:
-        #         new_feats_list.append(nn.Dropout(p=0.2, inplace=True))
-        # self.backbone_grd.features = nn.Sequential(*new_feats_list)
+        feats_list = list(self.backbone_grd.features)
+        feats_list = feats_list[:-1]
+        new_feats_list = []
+        for i in range(len(feats_list)):
+            new_feats_list.append(feats_list[i])
+            if isinstance(feats_list[i], nn.Conv2d) and i > 14:
+                new_feats_list.append(nn.Dropout(p=0.2, inplace=True))
+        self.backbone_grd.features = nn.Sequential(*new_feats_list)
 
-        # modules=list(self.backbone_grd.children())
-        # modules = modules[:len(modules) - 2]
-        # self.backbone_grd = nn.Sequential(*modules)
+        modules=list(self.backbone_grd.children())
+        modules = modules[:len(modules) - 2]
+        self.backbone_grd = nn.Sequential(*modules)
 
-        # feats_list = list(self.backbone_sat.features)
-        # feats_list = feats_list[:-1]
-        # new_feats_list = []
-        # for i in range(len(feats_list)):
-        #     new_feats_list.append(feats_list[i])
-        #     if isinstance(feats_list[i], nn.Conv2d) and i > 14:
-        #         new_feats_list.append(nn.Dropout(p=0.2, inplace=True))
-        # self.backbone_sat.features = nn.Sequential(*new_feats_list)
+        feats_list = list(self.backbone_sat.features)
+        feats_list = feats_list[:-1]
+        new_feats_list = []
+        for i in range(len(feats_list)):
+            new_feats_list.append(feats_list[i])
+            if isinstance(feats_list[i], nn.Conv2d) and i > 14:
+                new_feats_list.append(nn.Dropout(p=0.2, inplace=True))
+        self.backbone_sat.features = nn.Sequential(*new_feats_list)
 
-        # modules=list(self.backbone_sat.children())
-        # modules = modules[:len(modules) - 2]
-        # self.backbone_sat = nn.Sequential(*modules)
+        modules=list(self.backbone_sat.children())
+        modules = modules[:len(modules) - 2]
+        self.backbone_sat = nn.Sequential(*modules)
 
         # self.spatial_aware_grd = SA(in_dim=266, num=safa_heads)
         # self.spatial_aware_sat = SA(in_dim=256, num=safa_heads)
 
 
-        self.backbone_grd = ResNet34()
-        self.backbone_sat = ResNet34()
+        # self.backbone_grd = ResNet34()
+        # self.backbone_sat = ResNet34()
 
-        self.spatial_aware_grd = SA(in_dim=1344, num=safa_heads)
+        self.spatial_aware_grd = SA(in_dim=266, num=safa_heads)
         if is_polar:
-            self.spatial_aware_sat = SA(in_dim=1344, num=safa_heads)
+            self.spatial_aware_sat = SA(in_dim=266, num=safa_heads)
         else:
-            self.spatial_aware_sat = SA(in_dim=1024, num=safa_heads)
+            self.spatial_aware_sat = SA(in_dim=256, num=safa_heads)
 
         self.tanh = nn.Tanh()
 

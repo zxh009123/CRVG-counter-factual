@@ -18,10 +18,10 @@ import scipy.io as sio
 from utils.utils import ReadConfig, ValidateAll, validatenp
 
 from models.SAFA_TR import SAFA_TR
-from models.BAP import SCN_ResNet
+# from models.BAP import SCN_ResNet
 from models.SAFA_vgg import SAFA_vgg
 
-args_do_not_overide = ['data_dir', 'verbose']
+args_do_not_overide = ['data_dir', 'verbose', 'dataset']
 
 def ValidateOne(distArray, topK):
     acc = 0.0
@@ -103,11 +103,22 @@ if __name__ == "__main__":
         pos = None
     print("learnable positional embedding : ", pos)
 
+    # transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
+    #                 transforms.ToTensor(),
+    #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+    #                 ]
+    # transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
+    #                 transforms.ToTensor(),
+    #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+    #                 ]
+
     transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
+                    transforms.RandomHorizontalFlip(p=1.0),
                     transforms.ToTensor(),
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
     transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
+                    transforms.RandomHorizontalFlip(p=1.0),
                     transforms.ToTensor(),
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
@@ -123,10 +134,28 @@ if __name__ == "__main__":
 
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
+        embedding_dims = number_SAFA_heads * 512
     elif opt.model == "SAFA_TR":
-        model = SAFA_TR(safa_heads=opt.SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
-    elif opt.model == "SCN_ResNet":
-        model = SCN_ResNet()
+        model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+        embedding_dims = number_SAFA_heads * 512
+    elif opt.model == "SAFA_TR50":
+        model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+        embedding_dims = number_SAFA_heads * 512
+    elif opt.model == "TK_SAFF" or opt.model == "TK_FFusion" or opt.model == "TK_FA_TR":
+        if opt.tkp == 'conv':
+            TK_Pool = False
+        else:
+            TK_Pool = True
+
+        if opt.model == "TK_SAFF":
+            model = TK_SAFF(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
+            embedding_dims = opt.embed_dim
+        elif opt.model == "TK_FFusion":
+            model = TK_FFusion(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, pos = pos, is_polar=polar_transformation, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
+            embedding_dims = opt.embed_dim
+        elif opt.model == "TK_FA_TR":
+            model = TK_FA_TR(topk=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=2048, pos = 'learn_pos', is_polar=polar_transformation, TKPool=TK_Pool)
+            embedding_dims = opt.topK * 512
     else:
         raise RuntimeError(f"model {opt.model} is not implemented")
     model = nn.DataParallel(model)
@@ -144,8 +173,8 @@ if __name__ == "__main__":
     # valSateFeatures = None
     # valStreetFeature = None
 
-    sat_global_descriptor = np.zeros([8884, 4096])
-    grd_global_descriptor = np.zeros([8884, 4096])
+    sat_global_descriptor = np.zeros([8884, embedding_dims])
+    grd_global_descriptor = np.zeros([8884, embedding_dims])
     val_i = 0
 
     model.eval()

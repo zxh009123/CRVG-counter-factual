@@ -150,11 +150,16 @@ class SAFA_TR(nn.Module):
         self.backbone_grd = ResNet34()
         self.backbone_sat = ResNet34()
 
-        self.spatial_aware_grd = SA(in_dim=336, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
         if is_polar:
-            self.spatial_aware_sat = SA(in_dim=336, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
+            in_dim_sat = 336
+            in_dim_grd = 336
         else:
-            self.spatial_aware_sat = SA(in_dim=256, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
+            in_dim_sat = 256
+            in_dim_grd = 336
+
+        self.spatial_aware_grd = SA(in_dim=in_dim_grd, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
+
+        self.spatial_aware_sat = SA(in_dim=in_dim_sat, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
 
 
     def forward(self, sat, grd, is_cf):

@@ -152,17 +152,22 @@ class SA(nn.Module):
 
 
 class TK_FA_TR(nn.Module):
-    def __init__(self, topk=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos', TKPool=False):
+    def __init__(self, topk=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos', TKPool=False, project_dim=512):
         super().__init__()
 
         self.backbone_grd = ResNet34()
         self.backbone_sat = ResNet34()
 
-        self.spatial_aware_grd = SA(in_dim=336, topk=topk, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, project_dim=512, pos=pos, is_TKPool=TKPool)
         if is_polar:
-            self.spatial_aware_sat = SA(in_dim=336, topk=topk, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, project_dim=512, pos=pos, is_TKPool=TKPool)
+            in_dim_sat = 336
+            in_dim_grd = 336
         else:
-            self.spatial_aware_sat = SA(in_dim=256, topk=topk, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, project_dim=512, pos=pos, is_TKPool=TKPool)
+            in_dim_sat = 256
+            in_dim_grd = 336
+
+        self.spatial_aware_grd = SA(in_dim=in_dim_grd, topk=topk, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, project_dim=project_dim, pos=pos, is_TKPool=TKPool)
+       
+        self.spatial_aware_sat = SA(in_dim=in_dim_sat, topk=topk, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, project_dim=project_dim, pos=pos, is_TKPool=TKPool)
 
 
     def forward(self, sat, grd, is_cf):

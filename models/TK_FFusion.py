@@ -189,22 +189,10 @@ class TK_FFusion(nn.Module):
             in_dim_sat = 256
             in_dim_grd = 336
 
-        # self.backbone_grd = ResNet50()
-        # self.backbone_sat = ResNet50()
-        # #res50
-        # if is_polar:
-        #     in_dim_sat = 336
-        #     in_dim_grd = 336
-        # else:
-        #     in_dim_sat = 256
-        #     in_dim_grd = 336
-
 
         self.spatial_aware_grd = SA_TOPK(in_dim=in_dim_grd, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
-        if is_polar:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
-        else:
-            self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
+
+        self.spatial_aware_sat = SA_TOPK(in_dim=in_dim_sat, top_k=top_k, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, is_TKPool = TK_Pool, embed_dim=embed_dim)
 
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
