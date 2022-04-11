@@ -144,7 +144,7 @@ class SA(nn.Module):
 
 
 
-class SAFA_TR(nn.Module):
+class SAFA_TR50(nn.Module):
     def __init__(self, safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos'):
         super().__init__()
 
