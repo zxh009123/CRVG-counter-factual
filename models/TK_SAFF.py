@@ -90,8 +90,8 @@ class SA_TR_TOPK(nn.Module):
     def __init__(self, d_model=256, top_k = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
         #positional embedding
-        self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=True)
-        # self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=False)
+        # self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=True)
+        self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=False)
         # Transformer
         encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
         layer_norm = nn.LayerNorm(d_model)
@@ -114,7 +114,11 @@ class SA_TOPK(nn.Module):
         #dim of output tensor
         n_channel = embed_dim
 
-        self.channel_conv = torch.nn.Conv2d(512, n_channel, 1)
+        self.channel_conv = nn.Sequential(
+                            torch.nn.Conv2d(512, n_channel, 1),
+                            torch.nn.BatchNorm2d(n_channel),
+                            nn.ReLU()
+                            )
 
         if not self.is_TKPool:
             # 512 is the output channel of Res34
@@ -164,7 +168,8 @@ class SA_TOPK(nn.Module):
 
             features = self.safa_tr(features)
 
-            feature = features[:, 0]
+            # feature = features[:, 0]
+            feature = torch.mean(features, dim=1)
             feature = F.normalize(feature, p=2, dim=1)
 
             #random generate fake masks
@@ -172,7 +177,8 @@ class SA_TOPK(nn.Module):
             fake_mask = torch.zeros_like(mask).uniform_(-1, 1)
             fake_features = torch.matmul(fake_mask, x)
             fake_features = self.safa_tr(fake_features)
-            fake_feature = fake_features[:, 0]
+            # fake_feature = fake_features[:, 0]
+            fake_feature = torch.mean(fake_features, dim=1)
             fake_feature = F.normalize(fake_feature, p=2, dim=1)
 
             return feature, fake_feature
@@ -182,7 +188,8 @@ class SA_TOPK(nn.Module):
 
             features = self.safa_tr(features)
 
-            feature = features[:, 0]
+            # feature = features[:, 0]
+            feature = torch.mean(features, dim=1)
             feature = F.normalize(feature, p=2, dim=1)
 
             return feature
@@ -238,7 +245,7 @@ if __name__ == "__main__":
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)
-    result = model(sat, grd, False)
+    result = model(sat, grd, True)
     for i in result:
         print(i.shape)
 
