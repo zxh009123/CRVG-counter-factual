@@ -192,6 +192,88 @@ def validatenp(sat_global_descriptor, grd_global_descriptor):
         val_accuracy[0, i] = accuracy
     return val_accuracy
 
+def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=True):
+    dist_array = 2.0 - 2.0 * np.matmul(sat_global_descriptor, grd_global_descriptor.T)
+
+    if compute_rrate:
+        top1_percent = int(dist_array.shape[0] * 0.01) + 1
+        val_accuracy = np.zeros((2, 4)) # 1, 5, 10, 1%
+        for i, num in enumerate([1, 5, 10, top1_percent]):
+            # val_accuracy[0, i] = validate(dist_array, i)
+            col_acc = 0.0
+            row_acc = 0.0
+            data_amount = float(dist_array.shape[0])
+            for k in range(dist_array.shape[0]):
+                gt_dist = dist_array[k,k]
+                col_pred = np.sum(dist_array[:, k] < gt_dist)
+                if col_pred < num:
+                    col_acc += 1.0
+                row_pred = np.sum(dist_array[k, :] < gt_dist)
+                if row_pred < num:
+                    row_acc += 1.0
+            col_pred /= data_amount
+            row_pred /= data_amount
+            val_accuracy[0, i] = col_pred
+            val_accuracy[1, i] = row_pred
+    
+    # dist among: grd-sat, grd-sat_false, sat-sat_false, grd_false-sat
+    col_correct_top1 = [] #correct top1; specific col (grd as ref)
+    col_wrong_top1 = [] #wrong top1; specific col (grd as ref)
+    row_correct_top1 = [] #correct top1; specific row (sat as ref)
+    row_wrong_top1 = [] #wrong top1; specific row (sat as ref)
+    for k in range(dist_array.shape[0]):
+        d_sat_grd = dist_array[k, k]
+
+        col_min_id = np.argmin(dist_array[:, k])
+        row_min_id = np.argmin(dist_array[k, :])
+        dist_array[k,k] += 9999.
+
+        # grd as ref
+        if col_min_id == k:
+            min_id = np.argmin(dist_array[:, k])
+            d_satF_grd = dist_array[min_id, k]
+            d_sat_satF = 2.0 - 2.0 * np.dot(sat_global_descriptor[min_id], grd_global_descriptor[k])
+            col_correct_top1.append(
+                [float(k), float(min_id), d_sat_grd, d_satF_grd, d_sat_satF]
+            ) # idx, second_min_idx, d_sat_grd, d_satF_grd, d_sat_satF
+        else:
+            d_satF_grd = dist_array[col_min_id, k]
+            d_sat_satF = 2.0 - 2.0 * np.dot(sat_global_descriptor[col_min_id], grd_global_descriptor[k])
+            col_wrong_top1.append(
+                [float(k), float(col_min_id), d_sat_grd, d_satF_grd, d_sat_satF]
+            ) # idx, min_idx, d_sat_grd, d_satF_grd, d_sat_satF
+
+        # sat as ref
+        if row_min_id == k:
+            min_id = np.argmin(dist_array[k, :])
+            d_sat_grdF = dist_array[k, min_id]
+            d_grd_grdF = 2.0 - 2.0 * np.dot(sat_global_descriptor[k], grd_global_descriptor[min_id])
+            row_correct_top1.append(
+                [float(k), float(min_id), d_sat_grd, d_sat_grdF, d_grd_grdF]
+            ) # idx, second_min_idx, d_sat_grd, d_sat_grdF, d_grd_grdF
+        else:
+            d_sat_grdF = dist_array[k, row_min_id]
+            d_grd_grdF = 2.0 - 2.0 * np.dot(sat_global_descriptor[k], grd_global_descriptor[row_min_id])
+            row_wrong_top1.append(
+                [float(k), float(col_min_id), d_sat_grd, d_sat_grdF, d_grd_grdF]
+            ) # idx, min_idx, d_sat_grd, d_sat_grdF, d_grd_grdF
+
+        fname = "./distance_dist.npz"
+        np.savez_compressed(
+            fname,
+            col_correct_top1 = np.array(col_correct_top1),
+            col_wrong_top1 = np.array(col_wrong_top1),
+            row_correct_top1 = np.array(row_correct_top1),
+            row_wrong_top1 = np.array(row_wrong_top1)
+        )
+        print(f"distance dist saved to {fname}", flush=True)
+
+    if compute_rrate:
+        return val_accuracy
+    else:
+        return
+
+
 if __name__ == "__main__":
     a = torch.rand(10, 4096)
     b = torch.rand(10, 4096)
