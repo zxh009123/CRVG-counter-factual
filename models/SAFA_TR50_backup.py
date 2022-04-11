@@ -94,7 +94,7 @@ class ResNet50(nn.Module):
         net = models.resnet50(local_file='resnet50-0676ba61.pth')
 
         layers = list(net.children())[:3]
-        layers_end = list(net.children())[4:-3] #torch.Size([7, 1024, 16, 84]); 16*84=1344
+        layers_end = list(net.children())[4:-2]
         self.layers = nn.Sequential(*layers, *layers_end)
 
     def forward(self, x):
@@ -144,57 +144,70 @@ class SA(nn.Module):
 
 
 
-class SAFA_TR(nn.Module):
+class SAFA_TR50(nn.Module):
     def __init__(self, safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos'):
         super().__init__()
 
         self.backbone_grd = ResNet50()
         self.backbone_sat = ResNet50()
 
+        self.spatial_aware_grd = SA(in_dim=336, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
         if is_polar:
-            in_dim_sat = 1344
-            in_dim_grd = 1344
+            self.spatial_aware_sat = SA(in_dim=336, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
         else:
-            in_dim_sat = 256
-            in_dim_grd = 336
+            self.spatial_aware_sat = SA(in_dim=1024, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
 
-        self.spatial_aware_grd = SA(in_dim=in_dim_grd, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
+        self.filter_sat = nn.Conv1d(safa_heads, safa_heads, kernel_size=7, stride=4)
+        self.filter_grd = nn.Conv1d(safa_heads, safa_heads, kernel_size=7, stride=4)
 
-        self.spatial_aware_sat = SA(in_dim=in_dim_sat, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
-
-
-    def forward(self, sat, grd, is_cf):
+    def forward(self, sat, grd, is_cf=False):
         b = sat.shape[0]
 
         sat_x = self.backbone_sat(sat)
         grd_x = self.backbone_grd(grd)
+        # print(grd_x.shape, flush=True)
 
         sat_x = sat_x.view(b, sat_x.shape[1], -1)
         grd_x = grd_x.view(b, grd_x.shape[1], -1)
         sat_sa = self.spatial_aware_sat(sat_x)
         grd_sa = self.spatial_aware_grd(grd_x)
+        # print(grd_x.shape, flush=True)
         sat_sa = F.hardtanh(sat_sa)
         grd_sa = F.hardtanh(grd_sa)
+        # print(grd_sa.shape, flush=True)
         if is_cf:
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1, 1)
             fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1, 1)
 
-            sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
-            grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
+            sat_global = torch.matmul(sat_x, sat_sa).permute(0, 2, 1)
+            grd_global = torch.matmul(grd_x, grd_sa).permute(0, 2, 1)
+
+            sat_global = self.filter_sat(sat_global).view(b,-1)
+            grd_global = self.filter_grd(grd_global).view(b,-1)
 
             sat_global = F.normalize(sat_global, p=2, dim=1)
             grd_global = F.normalize(grd_global, p=2, dim=1)
 
-            fake_sat_global = torch.matmul(sat_x, fake_sat_sa).view(b,-1)
-            fake_grd_global = torch.matmul(grd_x, fake_grd_sa).view(b,-1)
+            fake_sat_global = torch.matmul(sat_x, fake_sat_sa).permute(0, 2, 1)
+            fake_grd_global = torch.matmul(grd_x, fake_grd_sa).permute(0, 2, 1)
+
+            fake_sat_global = self.filter_sat(fake_sat_global).view(b,-1)
+            fake_grd_global = self.filter_grd(fake_grd_global).view(b,-1)
 
             fake_sat_global = F.normalize(fake_sat_global, p=2, dim=1)
             fake_grd_global = F.normalize(fake_grd_global, p=2, dim=1)
 
             return sat_global, grd_global, fake_sat_global, fake_grd_global
         else:
-            sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
-            grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
+            # sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
+            # grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
+            sat_global = torch.matmul(sat_x, sat_sa).permute(0, 2, 1)
+            grd_global = torch.matmul(grd_x, grd_sa).permute(0, 2, 1)
+            # print(grd_global.shape, flush=True)
+            
+            sat_global = self.filter_sat(sat_global).view(b,-1)
+            grd_global = self.filter_grd(grd_global).view(b,-1)
+            # print(grd_global.shape, flush=True)
 
             sat_global = F.normalize(sat_global, p=2, dim=1)
             grd_global = F.normalize(grd_global, p=2, dim=1)
@@ -202,7 +215,7 @@ class SAFA_TR(nn.Module):
             return sat_global, grd_global
 
 if __name__ == "__main__":
-    model = SAFA_TR(safa_heads=12, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True)
+    model = SAFA_TR50(safa_heads=12, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True)
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)
