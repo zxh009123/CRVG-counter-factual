@@ -192,7 +192,7 @@ def validatenp(sat_global_descriptor, grd_global_descriptor):
         val_accuracy[0, i] = accuracy
     return val_accuracy
 
-def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=True):
+def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=True, fname="./distance_dist.npz"):
     dist_array = 2.0 - 2.0 * np.matmul(sat_global_descriptor, grd_global_descriptor.T)
 
     if compute_rrate:
@@ -211,10 +211,11 @@ def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=Tru
                 row_pred = np.sum(dist_array[k, :] < gt_dist)
                 if row_pred < num:
                     row_acc += 1.0
-            col_pred /= data_amount
-            row_pred /= data_amount
-            val_accuracy[0, i] = col_pred
-            val_accuracy[1, i] = row_pred
+            # print(i, num, col_pred, row_pred)
+            col_acc /= data_amount
+            row_acc /= data_amount
+            val_accuracy[0, i] = col_acc
+            val_accuracy[1, i] = row_acc
     
     # dist among: grd-sat, grd-sat_false, sat-sat_false, grd_false-sat
     col_correct_top1 = [] #correct top1; specific col (grd as ref)
@@ -258,15 +259,15 @@ def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=Tru
                 [float(k), float(col_min_id), d_sat_grd, d_sat_grdF, d_grd_grdF]
             ) # idx, min_idx, d_sat_grd, d_sat_grdF, d_grd_grdF
 
-        fname = "./distance_dist.npz"
-        np.savez_compressed(
-            fname,
-            col_correct_top1 = np.array(col_correct_top1),
-            col_wrong_top1 = np.array(col_wrong_top1),
-            row_correct_top1 = np.array(row_correct_top1),
-            row_wrong_top1 = np.array(row_wrong_top1)
-        )
-        print(f"distance dist saved to {fname}", flush=True)
+    # fname = "./distance_dist.npz"
+    np.savez_compressed(
+        fname,
+        col_correct_top1 = np.array(col_correct_top1),
+        col_wrong_top1 = np.array(col_wrong_top1),
+        row_correct_top1 = np.array(row_correct_top1),
+        row_wrong_top1 = np.array(row_wrong_top1)
+    )
+    print(f"distance dist saved to {fname}", flush=True)
 
     if compute_rrate:
         return val_accuracy

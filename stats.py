@@ -16,6 +16,7 @@ import argparse
 import json
 import scipy.io as sio
 from utils.utils import ReadConfig, ValidateAll, validatenp, distancestat
+import numpy as np
 
 from models.SAFA_TR import SAFA_TR
 from models.SAFA_TR50 import SAFA_TR50
@@ -183,10 +184,17 @@ if __name__ == "__main__":
             grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global.detach().cpu().numpy()
 
             val_i += sat_global.shape[0]
+    
+    # np.savez_compressed(
+    #     f"./sat_grd_global_features_{opt.dataset}.npz",
+    #     sat_global_descriptor = sat_global_descriptor,
+    #     grd_global_descriptor = grd_global_descriptor
+    # )
+
     if opt.validate:
         # valAcc = ValidateAll(valStreetFeature, valSateFeatures)
         # valAcc = validatenp(sat_global_descriptor, grd_global_descriptor)
-        valAcc = distancestat(sat_global_descriptor, grd_global_descriptor)
+        valAcc = distancestat(sat_global_descriptor, grd_global_descriptor, fname=f"./distance_dist_{opt.dataset}.npz")
         print(f"-----------validation result---------------")
         try:
             #print epoch loss

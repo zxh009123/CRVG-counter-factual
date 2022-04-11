@@ -161,3 +161,4 @@ myjob*
 *.out
 *.json
 *.jpg
+*.npz
