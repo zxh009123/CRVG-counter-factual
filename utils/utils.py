@@ -233,13 +233,13 @@ def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=Tru
         if col_min_id == k:
             min_id = np.argmin(dist_array[:, k])
             d_satF_grd = dist_array[min_id, k]
-            d_sat_satF = 2.0 - 2.0 * np.dot(sat_global_descriptor[min_id], grd_global_descriptor[k])
+            d_sat_satF = 2.0 - 2.0 * np.dot(sat_global_descriptor[min_id], sat_global_descriptor[k])
             col_correct_top1.append(
                 [float(k), float(min_id), d_sat_grd, d_satF_grd, d_sat_satF]
             ) # idx, second_min_idx, d_sat_grd, d_satF_grd, d_sat_satF
         else:
             d_satF_grd = dist_array[col_min_id, k]
-            d_sat_satF = 2.0 - 2.0 * np.dot(sat_global_descriptor[col_min_id], grd_global_descriptor[k])
+            d_sat_satF = 2.0 - 2.0 * np.dot(sat_global_descriptor[col_min_id], sat_global_descriptor[k])
             col_wrong_top1.append(
                 [float(k), float(col_min_id), d_sat_grd, d_satF_grd, d_sat_satF]
             ) # idx, min_idx, d_sat_grd, d_satF_grd, d_sat_satF
@@ -248,13 +248,13 @@ def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=Tru
         if row_min_id == k:
             min_id = np.argmin(dist_array[k, :])
             d_sat_grdF = dist_array[k, min_id]
-            d_grd_grdF = 2.0 - 2.0 * np.dot(sat_global_descriptor[k], grd_global_descriptor[min_id])
+            d_grd_grdF = 2.0 - 2.0 * np.dot(grd_global_descriptor[k], grd_global_descriptor[min_id])
             row_correct_top1.append(
                 [float(k), float(min_id), d_sat_grd, d_sat_grdF, d_grd_grdF]
             ) # idx, second_min_idx, d_sat_grd, d_sat_grdF, d_grd_grdF
         else:
             d_sat_grdF = dist_array[k, row_min_id]
-            d_grd_grdF = 2.0 - 2.0 * np.dot(sat_global_descriptor[k], grd_global_descriptor[row_min_id])
+            d_grd_grdF = 2.0 - 2.0 * np.dot(grd_global_descriptor[k], grd_global_descriptor[row_min_id])
             row_wrong_top1.append(
                 [float(k), float(col_min_id), d_sat_grd, d_sat_grdF, d_grd_grdF]
             ) # idx, min_idx, d_sat_grd, d_sat_grdF, d_grd_grdF
