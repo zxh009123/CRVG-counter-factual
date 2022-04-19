@@ -5,9 +5,9 @@ import torchvision.transforms as transforms
 from torch.optim import lr_scheduler
 import torchvision.models as models
 from torch.utils.data import DataLoader
-from dataset.usa_dataset import ImageDataset
+from dataset.usa_dataset import ImageDataset, USADataset
 # from dataset.act_dataset import TestDataset, TrainDataset
-from dataset.act_dataset import ActDataset
+from dataset.act_dataset import ACTDataset
 # from SMTL import softMarginTripletLoss
 from tqdm import tqdm
 import os
@@ -18,8 +18,11 @@ import scipy.io as sio
 from utils.utils import ReadConfig, ValidateAll, validatenp
 
 from models.SAFA_TR import SAFA_TR
-# from models.BAP import SCN_ResNet
+from models.SAFA_TR50 import SAFA_TR50
 from models.SAFA_vgg import SAFA_vgg
+from models.TK_SAFF import TK_SAFF
+from models.TK_FFusion import TK_FFusion
+from models.TK_FA_TR import TK_FA_TR
 
 args_do_not_overide = ['data_dir', 'verbose', 'dataset']
 
@@ -103,34 +106,44 @@ if __name__ == "__main__":
         pos = None
     print("learnable positional embedding : ", pos)
 
-    # transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-    #                 transforms.ToTensor(),
-    #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-    #                 ]
-    # transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-    #                 transforms.ToTensor(),
-    #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-    #                 ]
-
     transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-                    transforms.RandomHorizontalFlip(p=1.0),
                     transforms.ToTensor(),
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
     transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                    transforms.RandomHorizontalFlip(p=1.0),
                     transforms.ToTensor(),
                     transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                     ]
+
+    # transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
+    #                 transforms.RandomHorizontalFlip(p=1.0),
+    #                 transforms.ToTensor(),
+    #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+    #                 ]
+    # transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
+    #                 transforms.RandomHorizontalFlip(p=1.0),
+    #                 transforms.ToTensor(),
+    #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
+    #                 ]
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
     if opt.dataset == 'CVACT':
         data_path = os.path.join(opt.data_dir, 'CVACT')
-        validateloader = DataLoader(ActDataset(data_dir = data_path, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation, mode='val'), batch_size=batch_size, shuffle=False, num_workers=8)
+        # dataset = ActDataset(data_dir = data_path, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation, mode='val')
+        # validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+
+        dataset = ACTDataset(data_dir = data_path, geometric_aug='strong', sematic_aug='strong', is_polar=polar_transformation, mode='val')
+        validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
     if opt.dataset == 'CVUSA':
         data_path = os.path.join(opt.data_dir, 'CVUSA', 'dataset')
-        validateloader = DataLoader(ImageDataset(data_dir = data_path, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", is_polar=polar_transformation), batch_size=batch_size, shuffle=False, num_workers=8)
+        # dataset = ImageDataset(data_dir = data_path, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", is_polar=polar_transformation)
+        # validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+
+        dataset = USADataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', mode='val', is_polar=polar_transformation)
+        validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+    
+    print("number of test samples : ", len(dataset))
 
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
@@ -154,7 +167,7 @@ if __name__ == "__main__":
             model = TK_FFusion(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, pos = pos, is_polar=polar_transformation, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
             embedding_dims = opt.embed_dim
         elif opt.model == "TK_FA_TR":
-            model = TK_FA_TR(topk=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=2048, pos = 'learn_pos', is_polar=polar_transformation, TKPool=TK_Pool)
+            model = TK_FA_TR(topk=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=2048, pos = 'learn_pos', is_polar=polar_transformation, TKPool=TK_Pool, project_dim=opt.project_dim)
             embedding_dims = opt.topK * 512
     else:
         raise RuntimeError(f"model {opt.model} is not implemented")

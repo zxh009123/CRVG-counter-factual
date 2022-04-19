@@ -128,6 +128,8 @@ class SA_TOPK(nn.Module):
         self.w1, self.b1 = self.init_weights_(self.topk, in_dim, hid_dim)
         self.w2, self.b2 = self.init_weights_(self.topk, hid_dim, in_dim)
 
+        # self.w1, self.b1 = self.init_weights_2d(in_dim, hid_dim)
+        # self.w2, self.b2 = self.init_weights_2d(hid_dim, in_dim)
 
         self.safa_tr = SA_TR_TOPK(d_model=n_channel, top_k = top_k, nhead=tr_heads, nlayers=tr_layers, dropout = dropout, d_hid=2048)
 
@@ -135,6 +137,15 @@ class SA_TOPK(nn.Module):
         weight = torch.empty(channel, din, dout)
         nn.init.normal_(weight, mean=0.0, std=0.005)
         bias = torch.empty(1, channel, dout)
+        nn.init.constant_(bias, val=0.1)
+        weight = torch.nn.Parameter(weight)
+        bias = torch.nn.Parameter(bias)
+        return weight, bias
+
+    def init_weights_2d(self, din, dout):
+        weight = torch.empty(din, dout)
+        nn.init.normal_(weight, mean=0.0, std=0.005)
+        bias = torch.empty(1, dout)
         nn.init.constant_(bias, val=0.1)
         weight = torch.nn.Parameter(weight)
         bias = torch.nn.Parameter(bias)
@@ -245,7 +256,7 @@ if __name__ == "__main__":
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)
-    result = model(sat, grd, True)
+    result = model(sat, grd, False)
     for i in result:
         print(i.shape)
 

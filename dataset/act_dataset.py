@@ -7,11 +7,14 @@ import scipy.io as sio
 import torchvision
 import argparse
 import torchvision.transforms as transforms
+from .augmentations import HFlip, Rotate
+import random
+import torchvision
 # __all__ = ['TrainDataloader','TestDataloader']
 
 
-ACT_DATA_MAT_PATH = '/mnt/CVACT/ACT_data.mat'
-# ACT_DATA_MAT_PATH = '../scratch/CVACT/ACT_data.mat'
+# ACT_DATA_MAT_PATH = '/mnt/CVACT/ACT_data.mat'
+ACT_DATA_MAT_PATH = '../scratch/CVACT/ACT_data.mat'
 try:
     if os.environ["SERVER_NAME"] == "gpu02" or os.environ["SERVER_NAME"] == "gpu03" or os.environ["SERVER_NAME"] == "cluster":
         ACT_DATA_MAT_PATH = './ACT_data.mat'
@@ -19,10 +22,16 @@ except:
     pass
 
 
-# class TrainDataset(Dataset):
-#     def __init__(self, data_dir, transforms_sat, transforms_grd, is_polar=True):
+# class ActDataset(Dataset):
+#     def __init__(self, data_dir, transforms_sat, transforms_grd, is_polar=True, mode='train'):
+#         self.mode = mode
+#         if mode == 'train':
+#             folder_name = 'ANU_data_small'
+#         elif mode == 'val' or mode == 'test':
+#             folder_name = 'ANU_data_test'
+#         else:
+#             raise RuntimeError(f'no such mode: {mode}')
 
-#         # self.polar = args.polar
 
 #         self.img_root = data_dir
 #         self.transform_sat = transforms.Compose(transforms_sat)
@@ -37,21 +46,14 @@ except:
 #         # load the mat
 #         anuData = sio.loadmat(self.allDataList)
 
-
 #         idx = 0
 #         for i in range(0,len(anuData['panoIds'])):
             
-#             # if self.polar:
-#             #     grd_id_align = self.img_root + 'streetview/' + anuData['panoIds'][i] + '_grdView.png'
-#             #     sat_id_ori = self.img_root + 'polarmap/' + anuData['panoIds'][i] + '_satView_polish.png'
-#             # else:
-#             #     grd_id_align = self.img_root + 'streetview/' + anuData['panoIds'][i] + '_grdView.jpg'
-#             #     sat_id_ori = self.img_root + 'satview_polish/' + anuData['panoIds'][i] + '_satView_polish.jpg'
-#             grd_id_align = os.path.join(self.img_root, 'ANU_data_small', 'streetview_processed', anuData['panoIds'][i] + '_grdView.png')
+#             grd_id_align = os.path.join(self.img_root, folder_name, 'streetview_processed', anuData['panoIds'][i] + '_grdView.png')
 #             if is_polar:
-#                 sat_id_ori = os.path.join(self.img_root, 'ANU_data_small', 'polarmap', anuData['panoIds'][i] + '_satView_polish.png')
+#                 sat_id_ori = os.path.join(self.img_root, folder_name, 'polarmap', anuData['panoIds'][i] + '_satView_polish.png')
 #             else:
-#                 sat_id_ori = os.path.join(self.img_root, 'ANU_data_small', 'satview_polish', anuData['panoIds'][i] + '_satView_polish.jpg')
+#                 sat_id_ori = os.path.join(self.img_root, folder_name, 'satview_polish', anuData['panoIds'][i] + '_satView_polish.jpg')
 #             id_alllist.append([ grd_id_align, sat_id_ori])
 #             id_idx_alllist.append(idx)
 #             idx += 1
@@ -59,112 +61,31 @@ except:
 #         all_data_size = len(id_alllist)
 #         print('InputData::__init__: load', self.allDataList, ' data_size =', all_data_size)
 
+#         if mode == 'val':
+#             inds = anuData['valSet']['valInd'][0][0] - 1
+#         elif mode == 'test':
+#             inds = anuData['valSetAll']['valInd'][0][0] - 1
+#         elif mode == 'train':
+#             inds = anuData['trainSet']['trainInd'][0][0] - 1
+#         Num = len(inds)
+#         print('Number of samples:' ,Num)
+#         self.List = []
+#         self.IdList = []
 
+#         for k in range(Num):
+#             self.List.append(id_alllist[inds[k][0]])
+#             self.IdList.append(k)
 
-#         training_inds = anuData['trainSet']['trainInd'][0][0] - 1
-#         trainNum = len(training_inds)
-#         print('trainSet:' ,trainNum)
-#         self.trainList = []
-#         self.trainIdList = []
-
-        
-#         for k in range(trainNum):
-           
-#             self.trainList.append(id_alllist[training_inds[k][0]])
-#             self.trainIdList.append(k)  
-
-
-#     def __getitem__(self, idx):
-
-#         itmp = 0
-#         while(True):
-#             local_idx = idx + itmp
-#             try:
-#                 x = Image.open(self.trainList[local_idx][0])
-#                 # width, height = x.size
-#                 # x = x.crop((0, 265, width, 265+302))
-#                 x = self.transform_grd(x)
-                
-#                 y = Image.open(self.trainList[local_idx][1])
-#                 # if self.polar:
-#                 #     y = self.transform(y)
-#                 # else:
-#                 #     y = self.transform_1(y)
-#                 y = self.transform_sat(y)
-
-#                 break
-
-#             except:
-#                 itmp += 1
-
-#         # return x, y
-#         return {'satellite':y, 'ground':x}
-
-#     def __len__(self):
-#         return len(self.trainList)
-
-
-# class TestDataset(Dataset):
-#     def __init__(self, data_dir, transforms_sat, transforms_grd, is_polar=True):
-
-#         # self.polar = args.polar
-#         self.img_root = data_dir
-#         self.transform_sat = transforms.Compose(transforms_sat)
-#         self.transform_grd = transforms.Compose(transforms_grd)
-
-#         self.allDataList = ACT_DATA_MAT_PATH
-
-#         __cur_allid = 0  # for training
-#         id_alllist = []
-#         id_idx_alllist = []
-
-#         # load the mat
-#         anuData = sio.loadmat(self.allDataList)
-#         # print(anuData)
-
-#         idx = 0
-#         for i in range(0,len(anuData['panoIds'])):
-            
-#             # if self.polar:
-#             #     # polar transform and crop the ground view
-#             #     grd_id_align = self.img_root + 'streetview/' + anuData['panoIds'][i] + '_grdView.png'
-#             #     sat_id_ori = self.img_root + 'polarmap/' + anuData['panoIds'][i] + '_satView_polish.png'
-#             # else:
-#             #     grd_id_align = self.img_root + 'streetview/' + anuData['panoIds'][i] + '_grdView.jpg'
-#             #     sat_id_ori = self.img_root + 'satview_polish/' + anuData['panoIds'][i] + '_satView_polish.jpg'
-#             grd_id_align = os.path.join(self.img_root, 'ANU_data_test', 'streetview_processed', anuData['panoIds'][i] + '_grdView.png')
-#             if is_polar:
-#                 sat_id_ori = os.path.join(self.img_root, 'ANU_data_test', 'polarmap', anuData['panoIds'][i] + '_satView_polish.png')
-#             else:
-#                 sat_id_ori = os.path.join(self.img_root, 'ANU_data_test', 'satview_polish', anuData['panoIds'][i] + '_satView_polish.jpg')
-#             id_alllist.append([ grd_id_align, sat_id_ori])
-#             id_idx_alllist.append(idx)
-#             idx += 1
-
-#         all_data_size = len(id_alllist)
-#         print('InputData::__init__: load', self.allDataList, ' data_size =', all_data_size)
-
-
-#         self.val_inds = anuData['valSet']['valInd'][0][0] - 1
-#         # self.val_inds = anuData['valSetAll']['valInd'][0][0] - 1
-#         self.valNum = len(self.val_inds)
-#         print('valSet:' ,self.valNum)
-#         self.valList = []
-
-#         for k in range(self.valNum):
-#             self.valList.append(id_alllist[self.val_inds[k][0]])
-
-#         self.__cur_test_id = 0      
 
 #     def __getitem__(self, idx):
 #         itmp = 0
 #         while(True):
 #             local_idx = idx + itmp
 #             try:
-#                 x = Image.open(self.valList[local_idx][0])
+#                 x = Image.open(self.List[local_idx][0])
 #                 x = self.transform_grd(x)
 
-#                 y = Image.open(self.valList[local_idx][1])
+#                 y = Image.open(self.List[local_idx][1])
 #                 y = self.transform_sat(y)
 
 #                 break
@@ -174,11 +95,13 @@ except:
 #         # return x, y
 #         return {'satellite':y, 'ground':x}
 
-#     def __len__(self):
-#         return len(self.valList)
 
-class ActDataset(Dataset):
-    def __init__(self, data_dir, transforms_sat, transforms_grd, is_polar=True, mode='train'):
+#     def __len__(self):
+#         return len(self.List)
+
+
+class ACTDataset(Dataset):
+    def __init__(self, data_dir, geometric_aug='strong', sematic_aug='strong', is_polar=True, mode='train'):
         self.mode = mode
         if mode == 'train':
             folder_name = 'ANU_data_small'
@@ -187,8 +110,60 @@ class ActDataset(Dataset):
         else:
             raise RuntimeError(f'no such mode: {mode}')
         self.img_root = data_dir
-        self.transform_sat = transforms.Compose(transforms_sat)
-        self.transform_grd = transforms.Compose(transforms_grd)
+
+        self.is_polar = is_polar
+
+        STREET_IMG_WIDTH = 671
+        STREET_IMG_HEIGHT = 122
+
+        if not is_polar:
+            SATELLITE_IMG_WIDTH = 256
+            SATELLITE_IMG_HEIGHT = 256
+        else:
+            SATELLITE_IMG_WIDTH = 671
+            SATELLITE_IMG_HEIGHT = 122
+
+        transforms_street = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH))]
+        transforms_sat = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH))]
+
+        if sematic_aug == 'strong':
+            transforms_sat.append(transforms.ColorJitter(0.3, 0.3, 0.3))
+            transforms_street.append(transforms.ColorJitter(0.3, 0.3, 0.3))
+
+            transforms_sat.append(transforms.RandomGrayscale(p=0.2))
+            transforms_street.append(transforms.RandomGrayscale(p=0.2))
+
+            # transforms_sat.append(transforms.RandomInvert(p=0.2))
+            # transforms_street.append(transforms.RandomInvert(p=0.2))
+
+            transforms_sat.append(transforms.RandomPosterize(p=0.2, bits=4))
+            transforms_street.append(transforms.RandomPosterize(p=0.2, bits=4))
+
+            transforms_sat.append(transforms.GaussianBlur(kernel_size=(1, 5), sigma=(0.1, 5)))
+            transforms_street.append(transforms.GaussianBlur(kernel_size=(1, 5), sigma=(0.1, 5)))
+
+        elif sematic_aug == 'weak':
+            transforms_sat.append(transforms.ColorJitter(0.1, 0.1, 0.1))
+            transforms_street.append(transforms.ColorJitter(0.1, 0.1, 0.1))
+
+            transforms_sat.append(transforms.RandomGrayscale(p=0.1))
+            transforms_street.append(transforms.RandomGrayscale(p=0.1))
+
+        elif sematic_aug == 'none':
+            pass
+        else:
+            raise RuntimeError(f"sematic augmentation {sematic_aug} is not implemented")
+
+        transforms_sat.append(transforms.ToTensor())
+        transforms_sat.append(transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5)))
+
+        transforms_street.append(transforms.ToTensor())
+        transforms_street.append(transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5)))
+
+        self.transforms_sat = transforms.Compose(transforms_sat)
+        self.transforms_grd = transforms.Compose(transforms_street)
+
+        self.geometric_aug = geometric_aug
 
         self.allDataList = ACT_DATA_MAT_PATH
 
@@ -235,18 +210,45 @@ class ActDataset(Dataset):
         while(True):
             local_idx = idx + itmp
             try:
-                x = Image.open(self.List[local_idx][0])
-                x = self.transform_grd(x)
+                ground = Image.open(self.List[local_idx][0])
+                ground = self.transforms_grd(ground)
 
-                y = Image.open(self.List[local_idx][1])
-                y = self.transform_sat(y)
+                satellite = Image.open(self.List[local_idx][1])
+                satellite = self.transforms_sat(satellite)
 
                 break
             except:
                 itmp += 1
 
+        #geometric transform
+        if self.geometric_aug == "strong":
+            hflip = random.randint(0,1)
+            if hflip == 1:
+                satellite, ground = HFlip(satellite, ground)
+            else:
+                pass
+
+            orientation = random.choice(["left", "right", "back", "none"])
+            if orientation == "none":
+                pass
+            else:
+                satellite, ground = Rotate(satellite, ground, orientation, self.is_polar)
+
+        elif self.geometric_aug == "weak":
+            hflip = random.randint(0,1)
+            if hflip == 1:
+                satellite, ground = HFlip(satellite, ground)
+            else:
+                pass
+
+        elif self.geometric_aug == "none":
+            pass
+
+        else:
+            raise RuntimeError(f"geometric augmentation {self.geometric_aug} is not implemented")
+
         # return x, y
-        return {'satellite':y, 'ground':x}
+        return {'satellite':satellite, 'ground':ground}
 
 
     def __len__(self):

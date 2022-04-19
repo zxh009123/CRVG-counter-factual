@@ -4,9 +4,9 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
-from dataset.usa_dataset import ImageDataset
+from dataset.usa_dataset import ImageDataset, USADataset
 # from dataset.act_dataset import TestDataset, TrainDataset
-from dataset.act_dataset import ActDataset
+from dataset.act_dataset import ACTDataset
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -30,7 +30,7 @@ from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
      CFLoss, save_model, ValidateAll, WarmupCosineSchedule,\
      ReadConfig, IntraLoss, validatenp
 
-args_do_not_overide = ['data_dir', 'verbose', 'resume_from']
+args_do_not_overide = ['verbose', 'resume_from']
 TR_BASED_MODELS = ['SAFA_TR', 'SAFA_TR50', 'TK_SAFF', 'TK_FFusion', 'TK_FA_TR']
 
 def GetBestModel(path):
@@ -58,7 +58,7 @@ if __name__ == "__main__":
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
-    parser.add_argument("--save_suffix", type=str, default='_TK_FA_TR', help='name of the model at the end')
+    parser.add_argument("--save_suffix", type=str, default='_aug_strong', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch', help='dir to the dataset')
     parser.add_argument('--dataset', default='CVUSA', choices=['CVUSA', 'CVACT'], help='which dataset to use') 
     parser.add_argument("--model", type=str, help='model')
@@ -202,17 +202,29 @@ if __name__ == "__main__":
     # TODO: add support to CVACT
 
     if opt.dataset == "CVUSA":
-        dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
+        # dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
+        #     batch_size=batch_size, shuffle=True, num_workers=8)
+
+        dataloader = DataLoader(USADataset(data_dir = opt.data_dir, geometric_aug='strong', sematic_aug='strong', mode='train', is_polar=polar_transformation),\
             batch_size=batch_size, shuffle=True, num_workers=8)
 
-        validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
-            batch_size=batch_size, shuffle=False, num_workers=8)
+        validateloader = DataLoader(USADataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', mode='val', is_polar=polar_transformation),\
+            batch_size=batch_size, shuffle=True, num_workers=8)
+
+        # validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
+        #     batch_size=batch_size, shuffle=False, num_workers=8)
     elif opt.dataset == "CVACT":
-        dataloader = DataLoader(ActDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
-            batch_size=batch_size, shuffle=True, num_workers=8)
+        #val
+        validate_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
+        validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+        #train
+        train_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug='strong', sematic_aug='strong', is_polar=polar_transformation, mode='train')
+        dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+        # dataloader = DataLoader(ActDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
+        #     batch_size=batch_size, shuffle=True, num_workers=8)
 
-        validateloader = DataLoader(ActDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
-            batch_size=batch_size, shuffle=False, num_workers=8)
+        # validateloader = DataLoader(ActDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
+        #     batch_size=batch_size, shuffle=False, num_workers=8)
     #To be noticed: safa_heads represent k in topk when SAFA_TR in topk mode
     #change SAFA_TR mode in uncomment and comment line 233 to 243 in models/SAFA_TR.py 
     if opt.model == "SAFA_vgg":

@@ -114,6 +114,9 @@ class SA(nn.Module):
         self.project_dim = project_dim
         self.w1, self.b1 = self.init_weights_(self.topk, in_dim, self.project_dim)
         self.w2, self.b2 = self.init_weights_(self.topk, self.project_dim, in_dim)
+
+        # self.w1, self.b1 = self.init_weights_twodim_(in_dim, self.project_dim)
+        # self.w2, self.b2 = self.init_weights_twodim_(self.project_dim, in_dim)
         self.pos = pos
         if pos == 'learn_pos':
             self.safa_tr = SA_TR(d_model=self.project_dim, max_len=self.topk, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
@@ -124,6 +127,15 @@ class SA(nn.Module):
         weight = torch.empty(channel, din, dout)
         nn.init.normal_(weight, mean=0.0, std=0.005)
         bias = torch.empty(1, channel, dout)
+        nn.init.constant_(bias, val=0.1)
+        weight = torch.nn.Parameter(weight)
+        bias = torch.nn.Parameter(bias)
+        return weight, bias
+
+    def init_weights_twodim_(self, din, dout):
+        weight = torch.empty(din, dout)
+        nn.init.normal_(weight, mean=0.0, std=0.005)
+        bias = torch.empty(1, dout)
         nn.init.constant_(bias, val=0.1)
         weight = torch.nn.Parameter(weight)
         bias = torch.nn.Parameter(bias)
@@ -141,10 +153,12 @@ class SA(nn.Module):
             mask = mask.view(batch, self.topk, -1)
 
         mask = torch.einsum('bik, ikj -> bij', mask, self.w1) + self.b1
+        # mask = torch.einsum('bik, kj -> bij', mask, self.w1) + self.b1
 
         mask = self.safa_tr(mask)
 
         mask = torch.einsum('bij, ijk -> bik', mask, self.w2) + self.b2
+        # mask = torch.einsum('bij, jk -> bik', mask, self.w2) + self.b2
         mask = mask.permute(0,2,1)
 
         return mask
@@ -215,7 +229,7 @@ if __name__ == "__main__":
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)
-    result = model(sat, grd, False)
+    result = model(sat, grd, True)
     for i in result:
         print(i.shape)
 
