@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import torchvision.models as models
 from models.TR import TransformerEncoder, TransformerEncoderLayer
 import math
+from .transformer_aggregator import Create_MHSA
 
 class LearnablePE(nn.Module):
 
@@ -16,28 +17,38 @@ class LearnablePE(nn.Module):
             cls_token = torch.zeros(1, 1, d_model)
             self.cls_token = nn.Parameter(cls_token)
             self.max_len += 1
-            
 
         self.dropout = nn.Dropout(p=dropout)
         pe = torch.zeros(1, self.max_len, d_model)
         self.pe = torch.nn.Parameter(pe)
 
     def forward(self, x):
+
         if self.is_cls:
             cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
             x = torch.cat((cls_tokens, x), dim=1)
 
         x = x + self.pe
+
         return self.dropout(x)
 
 class PositionalEncoding(nn.Module):
 
-    def __init__(self, d_model = 256, max_len = 16, dropout=0.3):
+    def __init__(self, d_model = 256, max_len = 16, dropout=0.3, CLS=True):
         super().__init__()
+
+        self.is_cls = CLS
+        self.max_len = max_len
+        if self.is_cls:
+            cls_token = torch.zeros(1, 1, d_model)
+            self.cls_token = nn.Parameter(cls_token)
+            self.max_len += 1
+            
+
         self.dr = torch.nn.Dropout(p=dropout)
-        position = torch.arange(max_len).unsqueeze(1)
+        position = torch.arange(self.max_len).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2) * (-math.log(10000.0) / d_model))
-        pe = torch.zeros(1, max_len, d_model)#batch first
+        pe = torch.zeros(1, self.max_len, d_model)#batch first
         # print(position.shape)
         # print(div_term.shape)
         pe[0, :, 0::2] = torch.sin(position * div_term)
@@ -45,7 +56,13 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
 
     def forward(self, x):
+
+        if self.is_cls:
+            cls_tokens = self.cls_token.expand(x.shape[0], -1, -1)
+            x = torch.cat((cls_tokens, x), dim=1)
+
         x = x + self.pe[:x.size(0)]
+
         return self.dr(x)
 
 
@@ -90,17 +107,23 @@ class SA_TR_TOPK(nn.Module):
     def __init__(self, d_model=256, top_k = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
         #positional embedding
-        self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=True)
+        # self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=True)
         # self.pos_encoder = LearnablePE(d_model, max_len=top_k, dropout=dropout, CLS=False)
         # Transformer
-        encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
-        layer_norm = nn.LayerNorm(d_model)
-        self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = nlayers, norm=layer_norm)
+        # encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
+        # layer_norm = nn.LayerNorm(d_model)
+        # self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = nlayers, norm=layer_norm)
+
+        self.transformer_encoder, self.cls_token, pos_embed = Create_MHSA()
+        # self.pos_encoder = PositionalEncoding(d_model, max_len=top_k, dropout=dropout, CLS=True)
+        self.pos_drop = nn.Dropout(0.1)
+        self.pos_embed = nn.Parameter(pos_embed[:,0:top_k+1,:])
 
 
-    def forward(self, src):
-        src = self.pos_encoder(src)
-        output = self.transformer_encoder(src)
+    def forward(self, x):
+        x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
+        x = self.pos_drop(x + self.pos_embed)
+        output = self.transformer_encoder(x)
         return output
 
 class SA_TOPK(nn.Module):

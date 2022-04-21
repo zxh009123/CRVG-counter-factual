@@ -80,6 +80,8 @@ if __name__ == "__main__":
     parser.add_argument('--tkp', default='pool', choices=['pool', 'conv'], help='choose between pool or conv in TKSAFA') 
     parser.add_argument("--embed_dim", type=int, default=768, help='learned dim for TK_SAFF or TK_FF')
     parser.add_argument("--project_dim", type=int, default=168, help='Input dim in transformer of TK_FA_TR')
+    parser.add_argument('--geo_aug', default='strong', choices=['strong', 'weak', 'none'], help='geometric augmentation strength') 
+    parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength') 
 
     opt = parser.parse_args()
 
@@ -152,49 +154,7 @@ if __name__ == "__main__":
         logger.info(f'loading model from : {opt.resume_from}')
         save_name = opt.resume_from
 
-    writer = SummaryWriter(save_name)
-
-    val_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                    ]
-    val_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                    ]
-
-    if opt.model in TR_BASED_MODELS: #TR model need strong augmentation
-        # train_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-        #                 transforms.ColorJitter(0.2, 0.2, 0.2),
-        #                 transforms.RandomGrayscale(),
-        #                 transforms.ToTensor(),
-        #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-        #                 ]
-        # train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-        #                 transforms.ColorJitter(0.2, 0.2, 0.2),
-        #                 transforms.RandomGrayscale(),
-        #                 transforms.ToTensor(),
-        #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-        #                 ]
-        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-                        transforms.ToTensor(),
-                        transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                        ]
-        train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                        transforms.ToTensor(),
-                        transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                        ]
-    else:
-        train_transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-                        transforms.ColorJitter(0.1, 0.1, 0.1),
-                        transforms.ToTensor(),
-                        transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                        ]
-        train_transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                        transforms.ColorJitter(0.1, 0.1, 0.1),
-                        transforms.ToTensor(),
-                        transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                        ]
+    writer = SummaryWriter(save_name)  
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -202,29 +162,22 @@ if __name__ == "__main__":
     # TODO: add support to CVACT
 
     if opt.dataset == "CVUSA":
-        # dataloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
-        #     batch_size=batch_size, shuffle=True, num_workers=8)
 
-        dataloader = DataLoader(USADataset(data_dir = opt.data_dir, geometric_aug='strong', sematic_aug='strong', mode='train', is_polar=polar_transformation),\
+        dataloader = DataLoader(USADataset(data_dir = opt.data_dir, geometric_aug=opt.geo_aug, sematic_aug=opt.sem_aug, mode='train', is_polar=polar_transformation),\
             batch_size=batch_size, shuffle=True, num_workers=8)
 
         validateloader = DataLoader(USADataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', mode='val', is_polar=polar_transformation),\
             batch_size=batch_size, shuffle=True, num_workers=8)
 
-        # validateloader = DataLoader(ImageDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
-        #     batch_size=batch_size, shuffle=False, num_workers=8)
     elif opt.dataset == "CVACT":
+        #train
+        train_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug=opt.geo_aug, sematic_aug=opt.sem_aug, is_polar=polar_transformation, mode='train')
+        dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+
         #val
         validate_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
-        #train
-        train_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug='strong', sematic_aug='strong', is_polar=polar_transformation, mode='train')
-        dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
-        # dataloader = DataLoader(ActDataset(data_dir = opt.data_dir, transforms_street=train_transforms_street,transforms_sat=train_transforms_sate, mode="train", is_polar=polar_transformation),\
-        #     batch_size=batch_size, shuffle=True, num_workers=8)
-
-        # validateloader = DataLoader(ActDataset(data_dir = opt.data_dir, transforms_street=val_transforms_street,transforms_sat=val_transforms_sate, mode="val", is_polar=polar_transformation),\
-        #     batch_size=batch_size, shuffle=False, num_workers=8)
+        
     #To be noticed: safa_heads represent k in topk when SAFA_TR in topk mode
     #change SAFA_TR mode in uncomment and comment line 233 to 243 in models/SAFA_TR.py 
     if opt.model == "SAFA_vgg":
@@ -266,12 +219,6 @@ if __name__ == "__main__":
         lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
     else:
         raise RuntimeError("configs not implemented")
-
-    # if opt.fp16:
-    #     model, optimizer = amp.initialize(models=model,
-    #                                       optimizers=optimizer,
-    #                                       opt_level="O1")
-    #     amp._amp_state.loss_scalers[0]._loss_scale = 2**20 #magic number
 
 
     start_epoch = 0
