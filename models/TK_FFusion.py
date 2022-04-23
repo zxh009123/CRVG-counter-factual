@@ -2,7 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
-from models.TR import TransformerEncoder, TransformerEncoderLayer
+import os
+if os.environ["USER"] == "xyli1905":
+    from models.TR import TransformerEncoder, TransformerEncoderLayer
+else:
+    from torch.nn import TransformerEncoder, TransformerEncoderLayer
 import math
 from .transformer_aggregator import Create_MHSA
 
