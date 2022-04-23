@@ -1,4 +1,9 @@
 import torch
+from PIL import Image, ImageOps, ImageEnhance
+try:
+    import accimage
+except ImportError:
+    accimage = None
 
 
 def _get_image_num_channels(img) -> int:
@@ -28,6 +33,20 @@ def F_t_posterize(img, bits: int):
     return img & mask
 
 
+@torch.jit.unused
+def _is_pil_image(img) -> bool:
+    if accimage is not None:
+        return isinstance(img, (Image.Image, accimage.Image))
+    else:
+        return isinstance(img, Image.Image)
+
+@torch.jit.unused
+def F_pil_posterize(img, bits):
+    if not _is_pil_image(img):
+        raise TypeError('img should be PIL Image. Got {}'.format(type(img)))
+    return ImageOps.posterize(img, bits)
+
+
 def posterize(img, bits: int):
     """Posterize an image by reducing the number of bits for each color channel.
 
@@ -44,8 +63,8 @@ def posterize(img, bits: int):
     if not (0 <= bits <= 8):
         raise ValueError('The number if bits should be between 0 and 8. Got {}'.format(bits))
 
-    # if not isinstance(img, torch.Tensor):
-    #     return F_pil.posterize(img, bits)
+    if not isinstance(img, torch.Tensor):
+        return F_pil_posterize(img, bits)
 
     return F_t_posterize(img, bits)
 
