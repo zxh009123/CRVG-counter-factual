@@ -1,11 +1,8 @@
-import glob
 import random
 import os
-import json
-import math
 import time
-import torch
 from torch.utils.data import Dataset
+from .trans_utils import RandomPosterize
 from PIL import Image, ImageFile, ImageOps
 from .augmentations import HFlip, Rotate
 from torch.utils.data import DataLoader
@@ -88,9 +85,12 @@ class USADataset(Dataset):
 
             # transforms_sat.append(transforms.RandomInvert(p=0.2))
             # transforms_street.append(transforms.RandomInvert(p=0.2))
-
-            transforms_sat.append(transforms.RandomPosterize(p=0.2, bits=4))
-            transforms_street.append(transforms.RandomPosterize(p=0.2, bits=4))
+            try:
+                transforms_sat.append(transforms.RandomPosterize(p=0.2, bits=4))
+                transforms_street.append(transforms.RandomPosterize(p=0.2, bits=4))
+            except:
+                transforms_sat.append(RandomPosterize(p=0.2, bits=4))
+                transforms_street.append(RandomPosterize(p=0.2, bits=4))
 
             transforms_sat.append(transforms.GaussianBlur(kernel_size=(1, 5), sigma=(0.1, 5)))
             transforms_street.append(transforms.GaussianBlur(kernel_size=(1, 5), sigma=(0.1, 5)))
