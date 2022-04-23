@@ -192,7 +192,7 @@ def validatenp(sat_global_descriptor, grd_global_descriptor):
         val_accuracy[0, i] = accuracy
     return val_accuracy
 
-def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=True, fname="./distance_dist.npz"):
+def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=True, fname=None):
     dist_array = 2.0 - 2.0 * np.matmul(sat_global_descriptor, grd_global_descriptor.T)
 
     if compute_rrate:
@@ -216,6 +216,10 @@ def distancestat(sat_global_descriptor, grd_global_descriptor, compute_rrate=Tru
             row_acc /= data_amount
             val_accuracy[0, i] = col_acc
             val_accuracy[1, i] = row_acc
+    
+    if fname is None:
+        assert compute_rrate
+        return val_accuracy
     
     # dist among: grd-sat, grd-sat_false, sat-sat_false, grd_false-sat
     col_correct_top1 = [] #correct top1; specific col (grd as ref)
