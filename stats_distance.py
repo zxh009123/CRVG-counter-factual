@@ -1,21 +1,15 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import torchvision.transforms as transforms
-from torch.optim import lr_scheduler
-import torchvision.models as models
 from torch.utils.data import DataLoader
-from dataset.usa_dataset import ImageDataset
-# from dataset.act_dataset import TestDataset, TrainDataset
-from dataset.act_dataset import ActDataset
-# from SMTL import softMarginTripletLoss
+from dataset.usa_dataset import USADataset
+from dataset.act_dataset import ACTDataset
 from tqdm import tqdm
 import os
 import numpy as np
 import argparse
 import json
 import scipy.io as sio
-from utils.utils import ReadConfig, ValidateAll, validatenp, distancestat
+from utils.utils import ReadConfig, distancestat
 import numpy as np
 
 from models.SAFA_TR import SAFA_TR
@@ -26,26 +20,6 @@ from models.TK_FFusion import TK_FFusion
 from models.TK_FA_TR import TK_FA_TR
 
 args_do_not_overide = ['data_dir', 'verbose', 'dataset']
-
-def ValidateOne(distArray, topK):
-    acc = 0.0
-    dataAmount = 0.0
-    for i in range(distArray.shape[0]):
-        groundTruths = distArray[i,i]
-        pred = torch.sum(distArray[:,i] < groundTruths)
-        if pred < topK:
-            acc += 1.0
-        dataAmount += 1.0
-    return acc / dataAmount
-
-def ValidateAll(streetFeatures, satelliteFeatures):
-    distArray = 2 - 2 * torch.matmul(satelliteFeatures, torch.transpose(streetFeatures, 0, 1))
-    topOnePercent = int(distArray.shape[0] * 0.01) + 1
-    valAcc = torch.zeros((1, topOnePercent))
-    for i in range(topOnePercent):
-        valAcc[0,i] = ValidateOne(distArray, i)
-    
-    return valAcc
 
 def GetBestModel(path):
     all_files = os.listdir(path)
@@ -71,8 +45,7 @@ if __name__ == "__main__":
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
-    parser.add_argument('--validate', default=True, action='store_false', help='perform validate or not')
-    parser.add_argument('--save', default='none', choices=['none', 'mat', 'pt'], help='save extracted features into .mat files or pt files')
+    parser.add_argument('--suffix', type=str, default=None)
 
     opt = parser.parse_args()
 
@@ -107,34 +80,53 @@ if __name__ == "__main__":
         pos = None
     print("learnable positional embedding : ", pos)
 
-    transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-                    transforms.RandomHorizontalFlip(p=1.0),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                    ]
-    transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                    transforms.RandomHorizontalFlip(p=1.0),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                    ]
-
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
     if opt.dataset == 'CVACT':
         data_path = opt.data_dir
-        validateloader = DataLoader(ActDataset(data_dir = data_path, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation, mode='val'), batch_size=batch_size, shuffle=False, num_workers=8)
+        validateloader = DataLoader(
+            ACTDataset(
+                data_dir = data_path, geometric_aug='strong', sematic_aug='strong', is_polar=polar_transformation, mode='val'
+            ), 
+            batch_size=batch_size, 
+            shuffle=False, 
+            num_workers=8
+        )
     if opt.dataset == 'CVUSA':
         data_path = opt.data_dir
-        validateloader = DataLoader(ImageDataset(data_dir = data_path, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", is_polar=polar_transformation), batch_size=batch_size, shuffle=False, num_workers=8)
+        validateloader = DataLoader(
+            USADataset(
+                data_dir = data_path, geometric_aug='strong', sematic_aug='strong', mode="val", is_polar=polar_transformation
+            ), 
+            batch_size=batch_size, 
+            shuffle=False, 
+            num_workers=8
+        )
 
     if opt.model == "SAFA_vgg":
         model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
         embedding_dims = number_SAFA_heads * 512
     elif opt.model == "SAFA_TR":
-        model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+        model = SAFA_TR(
+            safa_heads=number_SAFA_heads, 
+            tr_heads=opt.TR_heads, 
+            tr_layers=opt.TR_layers, 
+            dropout = opt.dropout, 
+            d_hid=opt.TR_dim, 
+            is_polar=polar_transformation, 
+            pos=pos
+        )
         embedding_dims = number_SAFA_heads * 512
     elif opt.model == "SAFA_TR50":
-        model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+        model = SAFA_TR50(
+            safa_heads=number_SAFA_heads, 
+            tr_heads=opt.TR_heads, 
+            tr_layers=opt.TR_layers, 
+            dropout = opt.dropout, 
+            d_hid=opt.TR_dim, 
+            is_polar=polar_transformation, 
+            pos=pos
+        )
         embedding_dims = number_SAFA_heads * 512
     elif opt.model == "TK_SAFF" or opt.model == "TK_FFusion" or opt.model == "TK_FA_TR":
         if opt.tkp == 'conv':
@@ -143,13 +135,40 @@ if __name__ == "__main__":
             TK_Pool = True
 
         if opt.model == "TK_SAFF":
-            model = TK_SAFF(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
+            model = TK_SAFF(
+                top_k=opt.topK, 
+                tr_heads=opt.TR_heads, 
+                tr_layers=opt.TR_layers, 
+                dropout = opt.dropout, 
+                is_polar=polar_transformation, 
+                pos=pos, 
+                TK_Pool=TK_Pool, 
+                embed_dim=opt.embed_dim
+            )
             embedding_dims = opt.embed_dim
         elif opt.model == "TK_FFusion":
-            model = TK_FFusion(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, pos = pos, is_polar=polar_transformation, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
+            model = TK_FFusion(
+                top_k=opt.topK, 
+                tr_heads=opt.TR_heads, 
+                tr_layers=opt.TR_layers, 
+                dropout = opt.dropout, 
+                pos = pos, 
+                is_polar=polar_transformation, 
+                TK_Pool=TK_Pool, 
+                embed_dim=opt.embed_dim
+            )
             embedding_dims = opt.embed_dim
         elif opt.model == "TK_FA_TR":
-            model = TK_FA_TR(topk=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=2048, pos = 'learn_pos', is_polar=polar_transformation, TKPool=TK_Pool)
+            model = TK_FA_TR(
+                topk=opt.topK, 
+                tr_heads=opt.TR_heads, 
+                tr_layers=opt.TR_layers, 
+                dropout = opt.dropout, 
+                d_hid=2048, 
+                pos = 'learn_pos', 
+                is_polar=polar_transformation, 
+                TKPool=TK_Pool
+            )
             embedding_dims = opt.topK * 512
     else:
         raise RuntimeError(f"model {opt.model} is not implemented")
@@ -157,16 +176,11 @@ if __name__ == "__main__":
     model.to(device)
 
     best_model = GetBestModel(opt.model_path)
-    # best_epoch = 101
-    # best_model = os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
     best_model = os.path.join(opt.model_path, best_model)
     print("loading model : ", best_model)
     model.load_state_dict(torch.load(best_model)['model_state_dict'])
 
     print("start testing...")
-
-    # valSateFeatures = None
-    # valStreetFeature = None
 
     sat_global_descriptor = np.zeros([8884, embedding_dims])
     grd_global_descriptor = np.zeros([8884, embedding_dims])
@@ -191,31 +205,20 @@ if __name__ == "__main__":
     #     grd_global_descriptor = grd_global_descriptor
     # )
 
-    if opt.validate:
-        # valAcc = ValidateAll(valStreetFeature, valSateFeatures)
-        # valAcc = validatenp(sat_global_descriptor, grd_global_descriptor)
-        valAcc = distancestat(sat_global_descriptor, grd_global_descriptor, fname=f"./distance_dist_{opt.dataset}.npz")
-        print(f"-----------validation result---------------")
-        try:
-            #print epoch loss
-            # top1 = valAcc[0, 1]
-            print('col_top1', ':',  valAcc[0, 0] * 100.0)
-            print('col_top5', ':',  valAcc[0, 1] * 100.0)
-            print('col_top10', ':', valAcc[0, 2] * 100.0)
-            print('col_top1%', ':', valAcc[0, 3] * 100.0)
-            print("")
-            print('row_top1', ':',  valAcc[1, 0] * 100.0)
-            print('row_top5', ':',  valAcc[1, 1] * 100.0)
-            print('row_top10', ':', valAcc[1, 2] * 100.0)
-            print('row_top1%', ':', valAcc[1, 3] * 100.0)
-        except:
-            print(valAcc)
-        print(f"=================================================")
-
-    #save features
-    # if opt.save == 'mat':
-    #     features_dict = {'sat_global_descriptor':valSateFeatures, 'grd_global_descriptor':valStreetFeature}
-    #     sio.savemat("descriptors.mat", mdic)
-    # elif opt.save == 'pt':
-    #     torch.save(valSateFeatures, 'sat_global_descriptor.pt')
-    #     torch.save(valStreetFeature, 'grd_global_descriptor.pt')
+    file_name=f"./distance_dist_{opt.model}_{opt.dataset}"
+    file_name += ".npz" if opt.suffix is None else f"_{opt.suffix}.npz"
+    valAcc = distancestat(sat_global_descriptor, grd_global_descriptor, fname=file_name)
+    print(f"-----------validation result---------------")
+    try:
+        print('col_top1', ':',  valAcc[0, 0] * 100.0)
+        print('col_top5', ':',  valAcc[0, 1] * 100.0)
+        print('col_top10', ':', valAcc[0, 2] * 100.0)
+        print('col_top1%', ':', valAcc[0, 3] * 100.0)
+        print("")
+        print('row_top1', ':',  valAcc[1, 0] * 100.0)
+        print('row_top5', ':',  valAcc[1, 1] * 100.0)
+        print('row_top10', ':', valAcc[1, 2] * 100.0)
+        print('row_top1%', ':', valAcc[1, 3] * 100.0)
+    except:
+        print(valAcc)
+    print(f"=================================================")
