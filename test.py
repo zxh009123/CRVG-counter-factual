@@ -133,7 +133,7 @@ if __name__ == "__main__":
         # dataset = ActDataset(data_dir = data_path, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation, mode='val')
         # validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
-        dataset = ACTDataset(data_dir = data_path, geometric_aug='strong', sematic_aug='strong', is_polar=polar_transformation, mode='val')
+        dataset = ACTDataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
         validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
     if opt.dataset == 'CVUSA':
         data_path = os.path.join(opt.data_dir, 'CVUSA', 'dataset')

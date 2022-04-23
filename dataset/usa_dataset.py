@@ -96,11 +96,11 @@ class USADataset(Dataset):
             transforms_street.append(transforms.GaussianBlur(kernel_size=(1, 5), sigma=(0.1, 5)))
 
         elif sematic_aug == 'weak':
-            transforms_sat.append(transforms.ColorJitter(0.1, 0.1, 0.1))
-            transforms_street.append(transforms.ColorJitter(0.1, 0.1, 0.1))
+            transforms_sat.append(transforms.ColorJitter(0.2, 0.2, 0.2))
+            transforms_street.append(transforms.ColorJitter(0.2, 0.2, 0.2))
 
-            transforms_sat.append(transforms.RandomGrayscale(p=0.1))
-            transforms_street.append(transforms.RandomGrayscale(p=0.1))
+            transforms_sat.append(transforms.RandomGrayscale(p=0.2))
+            transforms_street.append(transforms.RandomGrayscale(p=0.2))
 
         elif sematic_aug == 'none':
             pass
