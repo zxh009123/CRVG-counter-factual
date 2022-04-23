@@ -14,6 +14,7 @@ import numpy as np
 
 from models.SAFA_TR import SAFA_TR
 from models.SAFA_TR50 import SAFA_TR50
+from models.SAFA_TR50_backup import SAFA_TR50 as SAFA_TR50_old
 from models.SAFA_vgg import SAFA_vgg
 from models.TK_SAFF import TK_SAFF
 from models.TK_FFusion import TK_FFusion
@@ -127,7 +128,18 @@ if __name__ == "__main__":
             is_polar=polar_transformation, 
             pos=pos
         )
-        embedding_dims = number_SAFA_heads * 512
+        embedding_dims = number_SAFA_heads * 512 * 2
+    elif opt.model == "SAFA_TR50_old":
+        model = SAFA_TR50_old(
+            safa_heads=number_SAFA_heads, 
+            tr_heads=opt.TR_heads, 
+            tr_layers=opt.TR_layers, 
+            dropout = opt.dropout, 
+            d_hid=opt.TR_dim, 
+            is_polar=polar_transformation, 
+            pos=pos
+        )
+        embedding_dims = 8176
     elif opt.model == "TK_SAFF" or opt.model == "TK_FFusion" or opt.model == "TK_FA_TR":
         if opt.tkp == 'conv':
             TK_Pool = False
