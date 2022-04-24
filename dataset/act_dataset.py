@@ -4,12 +4,10 @@ from torch.utils.data import Dataset
 from torchvision.transforms import transforms
 from PIL import Image
 import scipy.io as sio
-import torchvision
-import argparse
+from .trans_utils import RandomPosterize
 import torchvision.transforms as transforms
 from .augmentations import HFlip, Rotate
 import random
-import torchvision
 # __all__ = ['TrainDataloader','TestDataloader']
 
 
@@ -136,8 +134,12 @@ class ACTDataset(Dataset):
             # transforms_sat.append(transforms.RandomInvert(p=0.2))
             # transforms_street.append(transforms.RandomInvert(p=0.2))
 
-            transforms_sat.append(transforms.RandomPosterize(p=0.2, bits=4))
-            transforms_street.append(transforms.RandomPosterize(p=0.2, bits=4))
+            try:
+                transforms_sat.append(transforms.RandomPosterize(p=0.2, bits=4))
+                transforms_street.append(transforms.RandomPosterize(p=0.2, bits=4))
+            except:
+                transforms_sat.append(RandomPosterize(p=0.2, bits=4))
+                transforms_street.append(RandomPosterize(p=0.2, bits=4))
 
             transforms_sat.append(transforms.GaussianBlur(kernel_size=(1, 5), sigma=(0.1, 5)))
             transforms_street.append(transforms.GaussianBlur(kernel_size=(1, 5), sigma=(0.1, 5)))
