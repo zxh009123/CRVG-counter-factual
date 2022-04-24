@@ -32,7 +32,7 @@ def GetAllModel(path):
     config_files =  list(filter(lambda x: x.startswith('epoch_'), all_files))
     config_files = sorted(list(map(lambda x: int(x.split("_")[1]), config_files)), reverse=False)
     path_list = [
-        os.path.join('epoch_'+str(config_files[i]), 'epoch_'+str(config_files[i])+'.pth') for i in config_files
+        os.path.join('epoch_'+str(fn), 'epoch_'+str(fn)+'.pth') for fn in config_files
     ]
     return path_list
 
