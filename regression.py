@@ -1,35 +1,19 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from dataset.usa_dataset import USADataset
-from dataset.act_dataset import ACTDataset
 from tqdm import tqdm
 import os
 import numpy as np
 import argparse
 
-from models.SAFA_TR import SAFA_TR
-from models.SAFA_TR50 import SAFA_TR50
-from models.SAFA_TR50_backup import SAFA_TR50 as SAFA_TR50_old
-from models.SAFA_vgg import SAFA_vgg
-from models.TK_SAFF import TK_SAFF
-from models.TK_FFusion import TK_FFusion
-from models.TK_FA_TR import TK_FA_TR
-
+from dataset.augmentations import Free_Flip, Free_Rotation, Free_Improper_Rotation
 from utils.utils import ReadConfig, distancestat
-from dataset.augmentations import Free_Flip, Free_Rotation
+from utils.analysis_utils import (
+    GetBestModel, GetAllModel,
+    set_dataset, set_model
+)
 
 
 args_do_not_overide = ['data_dir', 'verbose', 'dataset']
-
-def GetBestModel(path):
-    all_files = os.listdir(path)
-    if "epoch_last" in all_files:
-        all_files.remove("epoch_last")
-    config_files =  list(filter(lambda x: x.startswith('epoch_'), all_files))
-    config_files = sorted(list(map(lambda x: int(x.split("_")[1]), config_files)), reverse=True)
-    best_epoch = config_files[0]
-    return os.path.join('epoch_'+str(best_epoch), 'epoch_'+str(best_epoch)+'.pth')
 
 def validate_one(
     model, validateloader, embedding_dims, 
@@ -68,20 +52,6 @@ def validate_one(
         valAcc[1, 2],
         valAcc[1, 3],
     ]
-    # try:
-    #     #print epoch loss
-    #     # top1 = valAcc[0, 1]
-    #     print('col_top1', ':',  valAcc[0, 0] * 100.0)
-    #     print('col_top5', ':',  valAcc[0, 1] * 100.0)
-    #     print('col_top10', ':', valAcc[0, 2] * 100.0)
-    #     print('col_top1%', ':', valAcc[0, 3] * 100.0)
-    #     print("")
-    #     print('row_top1', ':',  valAcc[1, 0] * 100.0)
-    #     print('row_top5', ':',  valAcc[1, 1] * 100.0)
-    #     print('row_top10', ':', valAcc[1, 2] * 100.0)
-    #     print('row_top1%', ':', valAcc[1, 3] * 100.0)
-    # except:
-    #     print(valAcc)
     return col_val_list, row_val_list
 
 
@@ -100,8 +70,9 @@ if __name__ == "__main__":
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
-    parser.add_argument('--reg_mode', type=str, default="rotate", choices=["rotate", 'flip'])
+    parser.add_argument('--reg_mode', type=str, default="rotate", choices=["rotate", 'flip', 'improper'])
     parser.add_argument('--suffix', type=str, default=None)
+    parser.add_argument('--model_mode', type=str, default="best", choices=["best", "all"])
 
     opt = parser.parse_args()
 
@@ -113,161 +84,54 @@ if __name__ == "__main__":
     
     print(opt, flush=True)
 
-    batch_size = opt.batch_size
-    number_SAFA_heads = opt.SAFA_heads
-
-    if opt.no_polar:
-        SATELLITE_IMG_WIDTH = 256
-        SATELLITE_IMG_HEIGHT = 256
-        polar_transformation = False
-    else:
-        SATELLITE_IMG_WIDTH = 671
-        SATELLITE_IMG_HEIGHT = 122
-        polar_transformation = True
-    print("SATELLITE_IMG_WIDTH:", SATELLITE_IMG_WIDTH, flush=True)
-    print("SATELLITE_IMG_HEIGHT:", SATELLITE_IMG_HEIGHT, flush=True)
-
-    STREET_IMG_WIDTH = 671
-    STREET_IMG_HEIGHT = 122
-
-    if opt.pos == "learn_pos":
-        pos = "learn_pos"
-    else:
-        pos = None
-    print("learnable positional embedding : ", pos)
-
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
-    if opt.dataset == 'CVACT':
-        data_path = opt.data_dir
-        validateloader = DataLoader(
-            ACTDataset(
-                data_dir = data_path, geometric_aug='strong', sematic_aug='strong', is_polar=polar_transformation, mode='val'
-            ), 
-            batch_size=batch_size, 
-            shuffle=False, 
-            num_workers=8
-        )
-    if opt.dataset == 'CVUSA':
-        data_path = opt.data_dir
-        validateloader = DataLoader(
-            USADataset(
-                data_dir = data_path, geometric_aug='strong', sematic_aug='strong', mode="val", is_polar=polar_transformation
-            ), 
-            batch_size=batch_size, 
-            shuffle=False,
-            num_workers=8
-        )
+    validateloader = set_dataset(opt)
 
-    if opt.model == "SAFA_vgg":
-        model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
-        embedding_dims = number_SAFA_heads * 512
-    elif opt.model == "SAFA_TR":
-        model = SAFA_TR(
-            safa_heads=number_SAFA_heads, 
-            tr_heads=opt.TR_heads, 
-            tr_layers=opt.TR_layers, 
-            dropout = opt.dropout, 
-            d_hid=opt.TR_dim, 
-            is_polar=polar_transformation, 
-            pos=pos
-        )
-        embedding_dims = number_SAFA_heads * 512
-    elif opt.model == "SAFA_TR50":
-        model = SAFA_TR50(
-            safa_heads=number_SAFA_heads, 
-            tr_heads=opt.TR_heads, 
-            tr_layers=opt.TR_layers, 
-            dropout = opt.dropout, 
-            d_hid=opt.TR_dim, 
-            is_polar=polar_transformation, 
-            pos=pos
-        )
-        embedding_dims = number_SAFA_heads * 512 * 2
-    elif opt.model == "SAFA_TR50_old":
-        model = SAFA_TR50_old(
-            safa_heads=number_SAFA_heads, 
-            tr_heads=opt.TR_heads, 
-            tr_layers=opt.TR_layers, 
-            dropout = opt.dropout, 
-            d_hid=opt.TR_dim, 
-            is_polar=polar_transformation, 
-            pos=pos
-        )
-        embedding_dims = 8176
-    elif opt.model == "TK_SAFF" or opt.model == "TK_FFusion" or opt.model == "TK_FA_TR":
-        if opt.tkp == 'conv':
-            TK_Pool = False
-        else:
-            TK_Pool = True
-
-        if opt.model == "TK_SAFF":
-            model = TK_SAFF(
-                top_k=opt.topK, 
-                tr_heads=opt.TR_heads, 
-                tr_layers=opt.TR_layers, 
-                dropout = opt.dropout, 
-                is_polar=polar_transformation, 
-                pos=pos, 
-                TK_Pool=TK_Pool, 
-                embed_dim=opt.embed_dim
-            )
-            embedding_dims = opt.embed_dim
-        elif opt.model == "TK_FFusion":
-            model = TK_FFusion(
-                top_k=opt.topK, 
-                tr_heads=opt.TR_heads, 
-                tr_layers=opt.TR_layers, 
-                dropout = opt.dropout, 
-                pos = pos, 
-                is_polar=polar_transformation, 
-                TK_Pool=TK_Pool, 
-                embed_dim=opt.embed_dim
-            )
-            embedding_dims = opt.embed_dim
-        elif opt.model == "TK_FA_TR":
-            model = TK_FA_TR(
-                topk=opt.topK, 
-                tr_heads=opt.TR_heads, 
-                tr_layers=opt.TR_layers, 
-                dropout = opt.dropout, 
-                d_hid=2048, 
-                pos = 'learn_pos', 
-                is_polar=polar_transformation, 
-                TKPool=TK_Pool
-            )
-            embedding_dims = opt.topK * 512
-    else:
-        raise RuntimeError(f"model {opt.model} is not implemented")
+    model, embedding_dims = set_model(opt)
     model = nn.DataParallel(model)
     model.to(device)
 
-    best_model = GetBestModel(opt.model_path)
-    best_model = os.path.join(opt.model_path, best_model)
-    print("loading model : ", best_model, flush=True)
-    model.load_state_dict(torch.load(best_model)['model_state_dict'])
-
     print("start testing...", flush=True)
+    if opt.model_mode == "best":
+        best_model = GetBestModel(opt.model_path)
+        model_list = [best_model]
+    elif opt.model_mode == "all":
+        model_list = GetAllModel(opt.model_path)
 
-    res = {}
-    aug_fn = Free_Rotation if opt.reg_mode == "rotate" else Free_Flip
-    deg_array = np.arrange()
-    for degree in deg_array:
-        col_val_list, row_val_list = validate_one(
-            model, validateloader, embedding_dims, aug_fn, degree, device, opt.verbose
+    if opt.reg_mode == "rotate":
+        aug_fn = Free_Rotation
+        deg_array = np.linspace(0., 360., 16)
+    elif opt.reg_mode == "flip":
+        aug_fn = Free_Flip
+        deg_array = np.linspace(0., 180., 16)
+    elif opt.reg_mode == "improper":
+        aug_fn = Free_Improper_Rotation
+        deg_array = np.linspace(0., 360., 16)
+
+    for a_model in model_list:
+        load_model = os.path.join(opt.model_path, a_model)
+        print(f"loading model : {load_model}", flush=True)
+        model.load_state_dict(torch.load(load_model)['model_state_dict'])
+
+        res = {}
+        for degree in deg_array:
+            col_val_list, row_val_list = validate_one(
+                model, validateloader, embedding_dims, aug_fn, degree, device, opt.verbose
+            )
+            res.update({
+                degree: {
+                    "col": col_val_list,
+                    "row": row_val_list
+                }
+            })
+        epoch = a_model.split("/")[0]
+        fname = f"reg_{opt.model}_{opt.dataset}_{opt.reg_mode}_{epoch}"
+        fname += ".npz" if opt.suffix is None else f"_{opt.suffix}.npz"
+        np.savez_compressed(
+            fname,
+            reg_res = res
         )
-        res.update({
-            degree: {
-                "col": col_val_list,
-                "row": row_val_list
-            }
-        })
-    fname = f"reg_{opt.model}_{opt.dataset}_{opt.reg_mode}"
-    fname += ".npz" if opt.suffix is None else f"_{opt.suffix}.npz"
-    np.savez_compressed(
-        fname,
-        reg_res = res
-    )
-    print(f"distance dist saved to {fname}", flush=True)
+        print(f"distance dist saved to {fname}", flush=True)
     
 

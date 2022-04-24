@@ -71,6 +71,31 @@ def Free_Rotation(sat, grd, degree):
     return sat_rotate, grd_rotate
 
 
+def Free_Improper_Rotation(sat, grd, degree):
+    """
+    only for polar case
+    degree will be made in [0., 360.]; clockwise by default; can be negative;
+    """
+    height, width = grd.shape[1], grd.shape[2]
+
+    sat = torch.flip(sat, [2])
+    grd = torch.flip(grd, [2])
+
+    degree = np.mod(degree, 360.)
+    ratio = 1.- degree / 360.
+    bound = int(width * ratio)
+
+    left_sat  = sat[:, :, 0:bound]
+    right_sat = sat[:, :, bound:]
+    sat_rotate = torch.cat([right_sat, left_sat], dim=2)
+
+    left_grd  = grd[:, :, 0:bound]
+    right_grd = grd[:, :, bound:]
+    grd_rotate = torch.cat([right_grd, left_grd], dim=2)
+
+    return sat_rotate, grd_rotate
+
+
 def Free_Flip(sat, grd, degree):
     """
     only for polar case
