@@ -1,0 +1,20 @@
+#!/bin/sh
+#SBATCH --partition=jupiter
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32G
+#SBATCH --time=03-23:59:59
+#SBATCH --job-name=reg_SAFA_TR_res34_STR_USA
+#SBATCH --output=%x_%j.out
+#SBATCH --mail-user=xyli1905@bsbii.cn
+#SBATCH --mail-type=ALL
+
+python regression.py \
+--dataset CVUSA \
+--data_dir /OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVUSA/ \
+--model_path SAFA_TR_STR_AUG_res34_best_model \
+--reg_mode rotate \
+--model_mode all \
+--suffix _reg_USA_rotate_all
