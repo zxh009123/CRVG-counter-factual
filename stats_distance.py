@@ -63,7 +63,7 @@ if __name__ == "__main__":
         sat_global_descriptor, grd_global_descriptor = eval_model(model, validateloader, embedding_dims, device, opt.verbose)
 
         epoch = a_model.split("/")[0]
-        file_name=f"./distance_dist_{opt.model}_{opt.dataset}_{epoch}"
+        file_name=f"./stats_distance_{opt.model}_{opt.dataset}_{epoch}"
         file_name += ".npz" if opt.suffix is None else f"_{opt.suffix}.npz"
         valAcc = distancestat(sat_global_descriptor, grd_global_descriptor, fname=file_name)
         print(f"-----------validation result {epoch}---------------", flush=True)

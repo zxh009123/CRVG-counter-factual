@@ -1,0 +1,19 @@
+#!/bin/sh
+#SBATCH --partition=jupiter
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32G
+#SBATCH --time=03-23:59:59
+#SBATCH --job-name=stats_SAFA_TR_old_res50_ACT
+#SBATCH --output=%x_%j.out
+#SBATCH --mail-user=xyli1905@bsbii.cn
+#SBATCH --mail-type=ALL
+
+python stats_distance.py \
+--dataset CVACT \
+--data_dir /OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVACT/ \
+--model_path 1648404489_SAFA_TR50_CVUSA_True_None_True__test \
+--model_mode all \
+--suffix _stats_ACT_all

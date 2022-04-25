@@ -132,6 +132,6 @@ if __name__ == "__main__":
             fname,
             reg_res = res
         )
-        print(f"distance dist saved to {fname}", flush=True)
+        print(f"regression res saved to {fname}", flush=True)
     
 
