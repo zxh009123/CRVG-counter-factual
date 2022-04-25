@@ -182,7 +182,8 @@ class SA_TOPK(nn.Module):
 
         if self.is_TKPool:
             x = x.view(batch, channel, -1)
-            mask, _ = torch.topk(x, self.topk, dim=1, sorted=True)
+            # mask, _ = torch.topk(x, self.topk, dim=1, sorted=True)
+            mask, _ = torch.topk(x, self.topk, dim=1, sorted=False)
         else:
             mask = self.conv_pool(x)
             mask = mask.view(batch, self.topk, -1)
