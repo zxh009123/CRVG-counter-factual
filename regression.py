@@ -80,6 +80,8 @@ if __name__ == "__main__":
     for k,v in config.items():
         if k in args_do_not_overide:
             continue
+        elif k == "model" and opt.model == "SAFA_TR50_old":
+            continue
         setattr(opt, k, v)
     
     print(opt, flush=True)
