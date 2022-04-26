@@ -121,6 +121,6 @@ def Free_Flip(sat, grd, degree):
     new_grd = torch.flip(new_grd, [3])
 
     # rotate back by degree
-    new_sat, new_grd = Free_Rotation(new_grd, new_grd, degree, axis="h")
+    new_sat, new_grd = Free_Rotation(new_sat, new_grd, degree, axis="h")
     
     return new_sat, new_grd
