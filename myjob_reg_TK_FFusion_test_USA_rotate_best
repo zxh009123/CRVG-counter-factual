@@ -6,7 +6,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=03-23:59:59
-#SBATCH --job-name=reg_SAFA_TR_888_res34_NO_USA_improper_best
+#SBATCH --job-name=reg_TK_FFusion_test_USA_rotate_best
 #SBATCH --output=%x_%j.out
 #SBATCH --mail-user=xyli1905@bsbii.cn
 #SBATCH --mail-type=ALL
@@ -14,7 +14,9 @@
 python regression.py \
 --dataset CVUSA \
 --data_dir /OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVUSA/ \
---model_path SAFA_TR_888_NO_AUG_res34_best_model \
---reg_mode improper \
+--model TK_FFusion \
+--load_model \
+--model_path 1649643310_TK_FFusion_CVUSA_False_learn_pos_True__TK_FFusion \
+--reg_mode rotate \
 --model_mode best \
---suffix reg_888_NO_AUG_USA_improper_best
+--suffix reg_TK_FFusion_test_USA_rotate_best

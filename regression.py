@@ -13,12 +13,12 @@ from utils.analysis_utils import (
 )
 
 
-args_do_not_overide = ['data_dir', 'verbose', 'dataset']
+args_do_not_overide = ['data_dir', 'verbose', 'dataset', "model"]
 
 def validate_one(
     model, validateloader, embedding_dims, 
     aug_fn, degree, 
-    device, verbose
+    device, verbose, no_sync
 ):
     sat_global_descriptor = np.zeros([8884, embedding_dims])
     grd_global_descriptor = np.zeros([8884, embedding_dims])
@@ -28,9 +28,15 @@ def validate_one(
     with torch.no_grad():
         for batch in tqdm(validateloader, disable=verbose):
 
-            sat, grd = aug_fn(batch['satellite'], batch['ground'], degree)
-            sat = sat.to(device)
-            grd = grd.to(device)
+            sat, grd = batch['satellite'], batch['ground']
+            new_sat, new_grd = aug_fn(batch['satellite'], batch['ground'], degree)
+            if no_sync:
+                # only rotate sat; grd as reference
+                sat = new_sat.to(device)
+                grd = grd.to(device)
+            else:
+                sat = new_sat.to(device)
+                grd = new_grd.to(device)
 
             sat_global, grd_global = model(sat, grd, is_cf=False)
 
@@ -73,6 +79,8 @@ if __name__ == "__main__":
     parser.add_argument('--reg_mode', type=str, default="rotate", choices=["rotate", 'flip', 'improper'])
     parser.add_argument('--suffix', type=str, default=None)
     parser.add_argument('--model_mode', type=str, default="best", choices=["best", "all"])
+    parser.add_argument("--load_model", default=False, action='store_true')
+    parser.add_argument("--no_sync", default=False, action='store_true', help="whether not aug sat and grd at the same time")
 
     opt = parser.parse_args()
 
@@ -80,8 +88,8 @@ if __name__ == "__main__":
     for k,v in config.items():
         if k in args_do_not_overide:
             continue
-        elif k == "model" and opt.model == "SAFA_TR50_old":
-            continue
+        # elif k == "model" and opt.model == "SAFA_TR50_old":
+        #     continue
         setattr(opt, k, v)
     
     print(opt, flush=True)
@@ -112,14 +120,16 @@ if __name__ == "__main__":
         deg_array = np.linspace(0., 360., 16)
 
     for a_model in model_list:
-        load_model = os.path.join(opt.model_path, a_model)
-        print(f"loading model : {load_model}", flush=True)
-        model.load_state_dict(torch.load(load_model)['model_state_dict'])
+        if opt.load_model:
+            load_model = os.path.join(opt.model_path, a_model)
+            print(f"loading model : {load_model}", flush=True)
+            model.load_state_dict(torch.load(load_model)['model_state_dict'])
 
         res = {}
         for degree in deg_array:
             col_val_list, row_val_list = validate_one(
-                model, validateloader, embedding_dims, aug_fn, degree, device, opt.verbose
+                model, validateloader, embedding_dims, aug_fn, degree, device, 
+                opt.verbose, opt.no_sync
             )
             res.update({
                 degree: {
