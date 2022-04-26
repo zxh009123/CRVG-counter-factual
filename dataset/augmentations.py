@@ -98,10 +98,10 @@ def Free_Improper_Rotation(sat, grd, degree, axis="h"):
         - "v" change the distribution; rel pos NOT preserved
     NOTE sat & grd of shape: (bs, c, h, w)
     """
-    sat = torch.flip(sat, [3])
-    grd = torch.flip(grd, [3])
+    new_sat = torch.flip(sat, [3])
+    new_grd = torch.flip(grd, [3])
 
-    sat_rotate, grd_rotate = Free_Rotation(sat, grd, degree, axis=axis)
+    sat_rotate, grd_rotate = Free_Rotation(new_sat, new_grd, degree, axis=axis)
 
     return sat_rotate, grd_rotate
 
