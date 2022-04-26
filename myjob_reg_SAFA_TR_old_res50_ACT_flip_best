@@ -14,6 +14,7 @@
 python regression.py \
 --dataset CVACT \
 --data_dir /OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVACT/ \
+--model SAFA_TR50_old \
 --model_path 1648404489_SAFA_TR50_CVUSA_True_None_True__test \
 --reg_mode flip \
 --model_mode best \
