@@ -1,0 +1,23 @@
+#!/bin/sh
+#SBATCH --partition=jupiter
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32G
+#SBATCH --time=03-23:59:59
+#SBATCH --job-name=aug_ddist_NO_AUG_ACT_train_gnone_snone
+#SBATCH --output=%x_%j.out
+#SBATCH --mail-user=xyli1905@bsbii.cn
+#SBATCH --mail-type=ALL
+
+python aug_test.py \
+--dataset CVACT \
+--data_dir /OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVACT/ \
+--dataset_type train \
+--model SAFA_TR \
+--model_path SAFA_TR_888_NO_AUG_res34_best_model \
+--model_mode best \
+--save_dist \
+--geo_aug none \
+--sem_aug none \

@@ -40,7 +40,7 @@ def GetAllModel(path):
     return path_list
 
 
-def set_dataset(opt, geo_aug="none", sem_aug="none"):
+def set_dataset(opt, geo_aug="none", sem_aug="none", mode="val"):
     # set params
     batch_size = opt.batch_size
     polar_transformation = not opt.no_polar
@@ -60,24 +60,31 @@ def set_dataset(opt, geo_aug="none", sem_aug="none"):
     STREET_IMG_HEIGHT = 122
 
     # select dataset
+    is_shuffle = False if mode == "val" else True
     if opt.dataset == 'CVACT':
         data_path = opt.data_dir
         validateloader = DataLoader(
             ACTDataset(
-                data_dir = data_path, geometric_aug=geo_aug, sematic_aug=sem_aug, is_polar=polar_transformation, mode='val'
+                data_dir = data_path, 
+                geometric_aug=geo_aug, sematic_aug=sem_aug, 
+                is_polar=polar_transformation, 
+                mode=mode
             ), 
             batch_size=batch_size, 
-            shuffle=False, 
+            shuffle=is_shuffle, 
             num_workers=8
         )
     elif opt.dataset == 'CVUSA':
         data_path = opt.data_dir
         validateloader = DataLoader(
             USADataset(
-                data_dir = data_path, geometric_aug=geo_aug, sematic_aug=sem_aug, mode="val", is_polar=polar_transformation
+                data_dir = data_path, 
+                geometric_aug=geo_aug, sematic_aug=sem_aug, 
+                mode=mode, 
+                is_polar=polar_transformation
             ), 
             batch_size=batch_size, 
-            shuffle=False, 
+            shuffle=is_shuffle, 
             num_workers=8
         )
     return validateloader
