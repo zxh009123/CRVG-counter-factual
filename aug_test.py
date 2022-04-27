@@ -34,10 +34,12 @@ def validate_one(
 
             sat_global, grd_global = model(sat, grd, is_cf=False)
 
-            sat_global_descriptor[val_i: val_i + sat_global.shape[0], :] = sat_global[:sat_global.shape[0]].detach().cpu().numpy()
-            grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global[:grd_global.shape[0]].detach().cpu().numpy()
+            deltanum = num % 32 if sat_global.shape[0] < 32 else 32
 
-            val_i += sat_global.shape[0]
+            sat_global_descriptor[val_i: val_i + deltanum, :] = sat_global.detach().cpu().numpy()
+            grd_global_descriptor[val_i: val_i + deltanum, :] = grd_global.detach().cpu().numpy()
+
+            val_i += deltanum
     
     valAcc = distancestat(sat_global_descriptor, grd_global_descriptor, fname=fname)
     # col_val_list = [

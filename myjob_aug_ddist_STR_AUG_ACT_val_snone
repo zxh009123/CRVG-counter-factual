@@ -6,7 +6,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=03-23:59:59
-#SBATCH --job-name=aug_ddist_STR_AUG_ACT_val_gnone_snone_lim
+#SBATCH --job-name=aug_ddist_STR_AUG_ACT_val_gnone_snone
 #SBATCH --output=%x_%j.out
 #SBATCH --mail-user=xyli1905@bsbii.cn
 #SBATCH --mail-type=ALL
