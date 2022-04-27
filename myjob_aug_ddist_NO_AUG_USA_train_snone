@@ -20,4 +20,4 @@ python aug_test.py \
 --model_mode best \
 --save_dist \
 --geo_aug none \
---sem_aug none \
+--sem_aug none
