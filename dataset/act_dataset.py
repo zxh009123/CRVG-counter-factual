@@ -214,18 +214,23 @@ class ACTDataset(Dataset):
 
     def __getitem__(self, idx):
         itmp = 0
-        # while(True):
-        #     local_idx = idx + itmp
-        #     try:
-        ground = Image.open(self.List[idx][0])
-        ground = self.transforms_grd(ground)
+        while(True):
+            local_idx = idx + itmp
+            try:
+        # ground = Image.open(self.List[idx][0])
+        # ground = self.transforms_grd(ground)
 
-        satellite = Image.open(self.List[idx][1])
-        satellite = self.transforms_sat(satellite)
+        # satellite = Image.open(self.List[idx][1])
+        # satellite = self.transforms_sat(satellite)
+                ground = Image.open(self.List[local_idx][0])
+                ground = self.transforms_grd(ground)
 
-            #     break
-            # except:
-            #     itmp += 1
+                satellite = Image.open(self.List[local_idx][1])
+                satellite = self.transforms_sat(satellite)
+
+                break
+            except:
+                itmp += 1
 
         #geometric transform
         if self.geometric_aug == "strong":
