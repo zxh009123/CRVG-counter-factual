@@ -34,10 +34,11 @@ def validate_one(
 
             sat_global, grd_global = model(sat, grd, is_cf=False)
 
-            deltanum = num % 32 if num-val_i < 32 else 32
+            bs = sat_global.shape[0]
+            deltanum = num % bs if num-val_i < bs else bs
 
-            sat_global_descriptor[val_i: val_i + deltanum, :] = sat_global.detach().cpu().numpy()
-            grd_global_descriptor[val_i: val_i + deltanum, :] = grd_global.detach().cpu().numpy()
+            sat_global_descriptor[val_i: val_i + deltanum, :] = sat_global[:deltanum].detach().cpu().numpy()
+            grd_global_descriptor[val_i: val_i + deltanum, :] = grd_global[:deltanum].detach().cpu().numpy()
 
             val_i += deltanum
     
