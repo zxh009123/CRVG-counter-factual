@@ -41,6 +41,8 @@ def validate_one(
             grd_global_descriptor[val_i: val_i + deltanum, :] = grd_global[:deltanum].detach().cpu().numpy()
 
             val_i += deltanum
+            if val_i == num:
+                break
     
     valAcc = distancestat(sat_global_descriptor, grd_global_descriptor, fname=fname)
     # col_val_list = [
