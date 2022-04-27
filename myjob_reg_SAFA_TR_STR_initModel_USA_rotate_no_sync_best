@@ -6,7 +6,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=03-23:59:59
-#SBATCH --job-name=reg_SAFA_TR_old_res50_USA_flip_best
+#SBATCH --job-name=reg_SAFA_TR_STR_initModel_USA_rotate_no_sync_best
 #SBATCH --output=%x_%j.out
 #SBATCH --mail-user=xyli1905@bsbii.cn
 #SBATCH --mail-type=ALL
@@ -14,8 +14,9 @@
 python regression.py \
 --dataset CVUSA \
 --data_dir /OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVUSA/ \
---model SAFA_TR50_old \
---model_path 1648404489_SAFA_TR50_CVUSA_True_None_True__test \
---reg_mode flip \
+--model SAFA_TR \
+--model_path SAFA_TR_STR_AUG_res34_best_model \
+--reg_mode rotate \
+--no_sync \
 --model_mode best \
---suffix reg_old_res50_USA_flip_best
+--suffix reg_STR_USA_initModel_rotate_no_sync_best

@@ -6,16 +6,17 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
 #SBATCH --time=03-23:59:59
-#SBATCH --job-name=reg_SAFA_TR_old_res50_ACT_flip_best
+#SBATCH --job-name=reg_TK_FFusion_test_USA_flip_best
 #SBATCH --output=%x_%j.out
 #SBATCH --mail-user=xyli1905@bsbii.cn
 #SBATCH --mail-type=ALL
 
 python regression.py \
---dataset CVACT \
---data_dir /OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVACT/ \
---model SAFA_TR50_old \
---model_path 1648404489_SAFA_TR50_CVUSA_True_None_True__test \
+--dataset CVUSA \
+--data_dir /OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVUSA/ \
+--model TK_FFusion \
+--load_model \
+--model_path 1649643310_TK_FFusion_CVUSA_False_learn_pos_True__TK_FFusion \
 --reg_mode flip \
 --model_mode best \
---suffix reg_old_res50_ACT_flip_best
+--suffix reg_TK_FFusion_test_USA_flip_best
