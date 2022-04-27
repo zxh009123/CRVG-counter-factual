@@ -14,8 +14,8 @@ if os.path.exists('/mnt/CVACT/ACT_data.mat'):
     ACT_DATA_MAT_PATH = '/mnt/CVACT/ACT_data.mat'
 elif os.path.exists('scratch/CVACT/ACT_data.mat'):
     ACT_DATA_MAT_PATH = 'scratch/CVACT/ACT_data.mat'
-elif os.path.exists('./ACT_data.mat'):
-    ACT_DATA_MAT_PATH = './ACT_data.mat'
+elif os.path.exists('./Matlab/ACT_data.mat'):
+    ACT_DATA_MAT_PATH = './Matlab/ACT_data.mat'
 else:
     raise RuntimeError('ACT_data mat does not exist')
 # try:
