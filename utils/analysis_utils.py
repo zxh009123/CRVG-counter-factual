@@ -8,12 +8,15 @@ from dataset.usa_dataset import USADataset
 from dataset.act_dataset import ACTDataset
 
 from models.SAFA_TR import SAFA_TR
-from models.SAFA_TR50 import SAFA_TR50
-from models.SAFA_TR50_backup import SAFA_TR50 as SAFA_TR50_old
-from models.SAFA_vgg import SAFA_vgg
-from models.TK_SAFF import TK_SAFF
-from models.TK_FFusion import TK_FFusion
-from models.TK_FA_TR import TK_FA_TR
+try:
+    from models.SAFA_TR50 import SAFA_TR50
+    from models.SAFA_TR50_backup import SAFA_TR50 as SAFA_TR50_old
+    from models.SAFA_vgg import SAFA_vgg
+    from models.TK_SAFF import TK_SAFF
+    from models.TK_FFusion import TK_FFusion
+    from models.TK_FA_TR import TK_FA_TR
+except:
+    pass
 
 
 def GetBestModel(path):

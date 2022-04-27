@@ -10,9 +10,12 @@ from .augmentations import HFlip, Rotate
 import random
 # __all__ = ['TrainDataloader','TestDataloader']
 
-
-# ACT_DATA_MAT_PATH = '/mnt/CVACT/ACT_data.mat'
-ACT_DATA_MAT_PATH = 'scratch/CVACT/ACT_data.mat'
+if os.path.exists('/mnt/CVACT/ACT_data.mat'):
+    ACT_DATA_MAT_PATH = '/mnt/CVACT/ACT_data.mat'
+elif os.path.exists('scratch/CVACT/ACT_data.mat'):
+    ACT_DATA_MAT_PATH = 'scratch/CVACT/ACT_data.mat'
+else:
+    raise RuntimeError('ACT_data mat does not exist')
 try:
     if os.environ["SERVER_NAME"] == "gpu02" or os.environ["SERVER_NAME"] == "gpu03" or os.environ["SERVER_NAME"] == "cluster":
         ACT_DATA_MAT_PATH = './ACT_data.mat'
@@ -209,18 +212,18 @@ class ACTDataset(Dataset):
 
     def __getitem__(self, idx):
         itmp = 0
-        while(True):
-            local_idx = idx + itmp
-            try:
-                ground = Image.open(self.List[local_idx][0])
-                ground = self.transforms_grd(ground)
+        # while(True):
+        #     local_idx = idx + itmp
+        #     try:
+        ground = Image.open(self.List[idx][0])
+        ground = self.transforms_grd(ground)
 
-                satellite = Image.open(self.List[local_idx][1])
-                satellite = self.transforms_sat(satellite)
+        satellite = Image.open(self.List[idx][1])
+        satellite = self.transforms_sat(satellite)
 
-                break
-            except:
-                itmp += 1
+            #     break
+            # except:
+            #     itmp += 1
 
         #geometric transform
         if self.geometric_aug == "strong":

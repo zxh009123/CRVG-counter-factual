@@ -20,9 +20,12 @@ from utils.utils import ReadConfig, ValidateAll, validatenp
 from models.SAFA_TR import SAFA_TR
 from models.SAFA_TR50 import SAFA_TR50
 from models.SAFA_vgg import SAFA_vgg
-from models.TK_SAFF import TK_SAFF
-from models.TK_FFusion import TK_FFusion
-from models.TK_FA_TR import TK_FA_TR
+try:
+    from models.TK_SAFF import TK_SAFF
+    from models.TK_FFusion import TK_FFusion
+    from models.TK_FA_TR import TK_FA_TR
+except:
+    pass
 
 args_do_not_overide = ['data_dir', 'verbose', 'dataset']
 
@@ -106,40 +109,15 @@ if __name__ == "__main__":
         pos = None
     print("learnable positional embedding : ", pos)
 
-    transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                    ]
-    transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                    transforms.ToTensor(),
-                    transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-                    ]
-
-    # transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-    #                 transforms.RandomHorizontalFlip(p=1.0),
-    #                 transforms.ToTensor(),
-    #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-    #                 ]
-    # transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-    #                 transforms.RandomHorizontalFlip(p=1.0),
-    #                 transforms.ToTensor(),
-    #                 transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
-    #                 ]
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
     if opt.dataset == 'CVACT':
         data_path = os.path.join(opt.data_dir, 'CVACT')
-        # dataset = ActDataset(data_dir = data_path, transforms_sat=transforms_sat,transforms_grd=transforms_street, is_polar=polar_transformation, mode='val')
-        # validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
-
         dataset = ACTDataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
         validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
     if opt.dataset == 'CVUSA':
         data_path = os.path.join(opt.data_dir, 'CVUSA', 'dataset')
-        # dataset = ImageDataset(data_dir = data_path, transforms_street=transforms_street,transforms_sat=transforms_sat, mode="val", is_polar=polar_transformation)
-        # validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
-
         dataset = USADataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', mode='val', is_polar=polar_transformation)
         validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8)
     
@@ -175,8 +153,8 @@ if __name__ == "__main__":
     model.to(device)
 
     best_model = GetBestModel(opt.model_path)
-    # best_epoch = 101
-    # best_model = os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
+    # best_epoch = 'last'
+    # best_model = os.path.join('epoch_'+str(best_epoch), 'epoch_'+str(best_epoch)+'.pth')
     best_model = os.path.join(opt.model_path, best_model)
     print("loading model : ", best_model)
     model.load_state_dict(torch.load(best_model)['model_state_dict'])
@@ -186,8 +164,8 @@ if __name__ == "__main__":
     # valSateFeatures = None
     # valStreetFeature = None
 
-    sat_global_descriptor = np.zeros([8884, embedding_dims])
-    grd_global_descriptor = np.zeros([8884, embedding_dims])
+    sat_global_descriptor = np.zeros([len(dataset), embedding_dims])
+    grd_global_descriptor = np.zeros([len(dataset), embedding_dims])
     val_i = 0
 
     model.eval()
@@ -199,19 +177,6 @@ if __name__ == "__main__":
             # grd = batch['street'][:,batch['street'].shape[1] // 2]
 
             sat_global, grd_global = model(sat, grd, is_cf=False)
-            # sat_global = F.normalize(sat_global)
-            # grd_global = F.normalize(grd_global)
-
-            #stack features to the container
-            # if valSateFeatures == None:
-            #     valSateFeatures = sat_global.detach()
-            # else:
-            #     valSateFeatures = torch.cat((valSateFeatures, sat_global.detach()), dim=0)
-
-            # if valStreetFeature == None:
-            #     valStreetFeature = grd_global.detach()
-            # else:
-            #     valStreetFeature = torch.cat((valStreetFeature, grd_global.detach()), dim=0)
 
             sat_global_descriptor[val_i: val_i + sat_global.shape[0], :] = sat_global.detach().cpu().numpy()
             grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global.detach().cpu().numpy()
@@ -234,8 +199,8 @@ if __name__ == "__main__":
 
     #save features
     if opt.save == 'mat':
-        features_dict = {'sat_global_descriptor':valSateFeatures, 'grd_global_descriptor':valStreetFeature}
-        sio.savemat("descriptors.mat", mdic)
+        features_dict = {'sat_global_descriptor':sat_global_descriptor, 'grd_global_descriptor':grd_global_descriptor}
+        sio.savemat("descriptors.mat", features_dict)
     elif opt.save == 'pt':
         torch.save(valSateFeatures, 'sat_global_descriptor.pt')
         torch.save(valStreetFeature, 'grd_global_descriptor.pt')
