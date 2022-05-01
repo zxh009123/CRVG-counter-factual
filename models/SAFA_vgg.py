@@ -77,9 +77,9 @@ class SAFA_vgg(nn.Module):
         # self.backbone_grd = ResNet34()
         # self.backbone_sat = ResNet34()
 
-        self.spatial_aware_grd = SA(in_dim=266, num=safa_heads)
+        self.spatial_aware_grd = SA(in_dim=287, num=safa_heads)
         if is_polar:
-            self.spatial_aware_sat = SA(in_dim=266, num=safa_heads)
+            self.spatial_aware_sat = SA(in_dim=287, num=safa_heads)
         else:
             self.spatial_aware_sat = SA(in_dim=256, num=safa_heads)
 

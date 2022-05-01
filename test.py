@@ -114,7 +114,7 @@ if __name__ == "__main__":
     
     if opt.dataset == 'CVACT':
         data_path = os.path.join(opt.data_dir, 'CVACT')
-        dataset = ACTDataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
+        dataset = ACTDataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='test')
         validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
     if opt.dataset == 'CVUSA':
         data_path = os.path.join(opt.data_dir, 'CVUSA', 'dataset')
