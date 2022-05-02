@@ -73,8 +73,8 @@ class USADataset(Dataset):
             SATELLITE_IMG_WIDTH = 671
             SATELLITE_IMG_HEIGHT = 122
 
-        transforms_street = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH))]
-        transforms_sat = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH))]
+        transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH))]
+        transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH))]
 
         if sematic_aug == 'strong':
             transforms_sat.append(transforms.ColorJitter(0.3, 0.3, 0.3))

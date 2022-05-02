@@ -28,7 +28,7 @@ from models.TK_FA_TR import TK_FA_TR
 
 from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
      CFLoss, save_model, ValidateAll, WarmupCosineSchedule,\
-     ReadConfig, IntraLoss, validatenp
+     ReadConfig, IntraLoss, validatenp, softMarginTripletLossACT
 
 args_do_not_overide = ['verbose', 'resume_from']
 TR_BASED_MODELS = ['SAFA_TR', 'SAFA_TR50', 'TK_SAFF', 'TK_FFusion', 'TK_FA_TR']
@@ -167,16 +167,18 @@ if __name__ == "__main__":
             batch_size=batch_size, shuffle=True, num_workers=8)
 
         validateloader = DataLoader(USADataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', mode='val', is_polar=polar_transformation),\
-            batch_size=batch_size, shuffle=True, num_workers=8)
+            batch_size=batch_size, shuffle=False, num_workers=8)
+
 
     elif opt.dataset == "CVACT":
         #train
         train_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug=opt.geo_aug, sematic_aug=opt.sem_aug, is_polar=polar_transformation, mode='train')
-        dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+        dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
 
         #val
         validate_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+
         
     #To be noticed: safa_heads represent k in topk when SAFA_TR in topk mode
     #change SAFA_TR mode in uncomment and comment line 233 to 243 in models/SAFA_TR.py 
@@ -212,11 +214,13 @@ if __name__ == "__main__":
     #set optimizer and lr scheduler
     if opt.model == "SAFA_vgg":
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay)
-        lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.95)
+        lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.98)
     elif opt.model in TR_BASED_MODELS:
         optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay, eps=1e-6)
-        # lrSchedule = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=WarmUpGamma(number_of_epoch, 5, 0.97).step)
         lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
+        
+        # optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay)
+        # lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.97)
     else:
         raise RuntimeError("configs not implemented")
 
@@ -265,7 +269,10 @@ if __name__ == "__main__":
                 else:
                     sat_global, grd_global = model(sat, grd, is_cf)
                 # soft margin triplet loss
-                triplet_loss = softMarginTripletLoss(sat_global, grd_global, gamma)
+                if opt.dataset == "CVUSA":
+                    triplet_loss = softMarginTripletLoss(sate_vecs=sat_global, pano_vecs=grd_global, loss_weight=gamma)
+                elif opt.dataset == "CVACT":
+                    triplet_loss = softMarginTripletLossACT(sate_vecs=sat_global, pano_vecs=grd_global, utm=batch['utm'], loss_weight=gamma)
                 loss = triplet_loss
 
                 epoch_triplet_loss += loss.item()

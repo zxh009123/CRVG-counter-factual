@@ -86,6 +86,46 @@ def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10.0, hard_topk_rati
     loss = (loss_s2p + loss_p2s) / 2.0
     return loss
 
+def softMarginTripletLossACT(sate_vecs, pano_vecs, utm, UTMthres=625,loss_weight=10.0, hard_topk_ratio=1.0):
+
+    in_batch_dis = torch.zeros(utm.shape[0], utm.shape[0]).to(sate_vecs.get_device())
+    for k in range(utm.shape[0]):
+        for j in range(utm.shape[0]):
+            in_batch_dis[k, j] = (utm[k,0] - utm[j,0])*(utm[k,0] - utm[j,0]) + (utm[k, 1] - utm[j, 1])*(utm[k, 1] - utm[j, 1])
+
+    dists = 2.0 - 2.0 * torch.matmul(sate_vecs, pano_vecs.permute(1, 0))  # Pairwise matches within batch
+    pos_dists = torch.diag(dists)
+    N = len(pos_dists)
+    diag_ids = np.arange(N)
+    useful_pairs = torch.ge(in_batch_dis[:,:], UTMthres)
+    useful_pairs = useful_pairs.float()
+    pair_n = useful_pairs.sum()
+    # num_hard_triplets = int(hard_topk_ratio * (N * (N - 1))) if hard_topk_ratio < 1.0 else N * (N - 1)
+    num_hard_triplets = int(hard_topk_ratio * (N * (N - 1))) if int(hard_topk_ratio * (N * (N - 1))) < pair_n else pair_n
+
+    # Match from satellite to street pano
+    triplet_dist_s2p = (pos_dists.unsqueeze(1) - dists) * useful_pairs
+    loss_s2p = torch.log(1.0 + torch.exp(loss_weight * triplet_dist_s2p))
+    loss_s2p[diag_ids, diag_ids] = 0.0  # Ignore diagnal losses
+
+    if num_hard_triplets != pair_n:  # Hard negative mining
+        loss_s2p = loss_s2p.view(-1)
+        loss_s2p, s2p_ids = torch.topk(loss_s2p, num_hard_triplets)
+    loss_s2p = loss_s2p.sum() / float(num_hard_triplets)
+
+    # Match from street pano to satellite
+    triplet_dist_p2s = (pos_dists - dists) * useful_pairs
+    loss_p2s = torch.log(1.0 + torch.exp(loss_weight * triplet_dist_p2s))
+    loss_p2s[diag_ids, diag_ids] = 0.0  # Ignore diagnal losses
+
+    if num_hard_triplets != pair_n:  # Hard negative mining
+        loss_p2s = loss_p2s.view(-1)
+        loss_p2s, p2s_ids = torch.topk(loss_p2s, num_hard_triplets)
+    loss_p2s = loss_p2s.sum() / float(num_hard_triplets)
+    # Total loss
+    loss = (loss_s2p + loss_p2s) / 2.0
+    return loss
+
 def IntraLoss(sate_vecs, pano_vecs, loss_weight=10.0, hard_topk_ratio=1.0):
     # satllite pairwise
     dists_sat = 2.0 - 2.0 * torch.matmul(sate_vecs, sate_vecs.permute(1, 0))
@@ -131,6 +171,8 @@ def CFLoss(vecs, hat_vecs, loss_weight=5.0):
     loss = loss.sum() / vecs.shape[0]
 
     return loss
+
+
 
 def save_model(savePath, model, optimizer, scheduler, epoch, last=True):
     if last == True:

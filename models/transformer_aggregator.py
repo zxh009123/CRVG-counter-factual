@@ -10,7 +10,10 @@
 
 # print(b.shape)
 
-import timm
+try:
+    import timm
+except:
+    pass
 import torch
 from pprint import pprint
 import torch.nn as nn

@@ -1,9 +1,9 @@
-
 clear all;
 close all;
 clc;
 
-desc_path = 'descriptors.mat';
+desc_path = 'descriptors_strong_strong.mat';
+disp(desc_path)
 
 desc = load(desc_path)
 
@@ -15,7 +15,7 @@ grd_desc = single(desc.grd_global_descriptor);
 
 % knn search
 
-topk = 200;
+topk = 1000;
 
 sat_desc = sat_desc';
 grd_desc = grd_desc';
@@ -40,7 +40,7 @@ parfor i = 1:nb_images
     L2_dis = sqrt(L2_dis(:,1).^2 + L2_dis(:,2).^2);
     
     df = L2_dis <=5;
-    recalls_5(i,:) = cumsum(df);
+    recalls_5(i,:) = cumsum(df');
 
 end
 

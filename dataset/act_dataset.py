@@ -8,6 +8,7 @@ from .trans_utils import RandomPosterize
 import torchvision.transforms as transforms
 from .augmentations import HFlip, Rotate
 import random
+import numpy as np
 # __all__ = ['TrainDataloader','TestDataloader']
 
 if os.path.exists('/mnt/CVACT/ACT_data.mat'):
@@ -126,8 +127,8 @@ class ACTDataset(Dataset):
             SATELLITE_IMG_WIDTH = 671
             SATELLITE_IMG_HEIGHT = 122
 
-        transforms_street = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH))]
-        transforms_sat = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH))]
+        transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH))]
+        transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH))]
 
         if sematic_aug == 'strong':
             transforms_sat.append(transforms.ColorJitter(0.3, 0.3, 0.3))
@@ -189,7 +190,7 @@ class ACTDataset(Dataset):
                 sat_id_ori = os.path.join(self.img_root, folder_name, 'polarmap', anuData['panoIds'][i] + '_satView_polish.png')
             else:
                 sat_id_ori = os.path.join(self.img_root, folder_name, 'satview_polish', anuData['panoIds'][i] + '_satView_polish.jpg')
-            id_alllist.append([ grd_id_align, sat_id_ori])
+            id_alllist.append([ grd_id_align, sat_id_ori, anuData['utm'][i][0], anuData['utm'][i][1]])
             id_idx_alllist.append(idx)
             idx += 1
 
@@ -214,23 +215,22 @@ class ACTDataset(Dataset):
 
     def __getitem__(self, idx):
         itmp = 0
-        while(True):
-            local_idx = idx + itmp
-            try:
-        # ground = Image.open(self.List[idx][0])
-        # ground = self.transforms_grd(ground)
+        # while(True):
+        #     local_idx = idx + itmp
+        #     try:
+        ground = Image.open(self.List[idx][0])
+        ground = self.transforms_grd(ground)
 
-        # satellite = Image.open(self.List[idx][1])
-        # satellite = self.transforms_sat(satellite)
-                ground = Image.open(self.List[local_idx][0])
-                ground = self.transforms_grd(ground)
+        satellite = Image.open(self.List[idx][1])
+        satellite = self.transforms_sat(satellite)
 
-                satellite = Image.open(self.List[local_idx][1])
-                satellite = self.transforms_sat(satellite)
+        utm = np.array([self.List[idx][2], self.List[idx][3]])
 
-                break
-            except:
-                itmp += 1
+        # print(f'ground : {self.List[idx][0]}, \n satellite : {self.List[idx][1]}, \n utm : {utm}')
+
+            #     break
+            # except:
+            #     itmp += 1
 
         #geometric transform
         if self.geometric_aug == "strong":
@@ -260,7 +260,7 @@ class ACTDataset(Dataset):
             raise RuntimeError(f"geometric augmentation {self.geometric_aug} is not implemented")
 
         # return x, y
-        return {'satellite':satellite, 'ground':ground}
+        return {'satellite':satellite, 'ground':ground, 'utm':utm}
 
 
     def __len__(self):
@@ -279,7 +279,7 @@ if __name__ == "__main__":
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
-    dataloader = DataLoader(ActDataset(data_dir = "../scratch/CVACT/", transforms_sat=transforms_sat, transforms_grd=transforms_grd, is_polar=True, mode='train'),batch_size=4, shuffle=True, num_workers=8)
+    dataloader = DataLoader(ACTDataset(data_dir='/mnt/CVACT/', geometric_aug='strong', sematic_aug='strong', is_polar=True, mode='train'),batch_size=4, shuffle=True, num_workers=8)
 
     i = 0
     for k in dataloader:
@@ -287,6 +287,7 @@ if __name__ == "__main__":
         print("---batch---")
         print("satellite : ", k['satellite'].shape)
         print("grd : ", k['ground'].shape)
+        print("grd : ", k['utm'])
         print("-----------")
         if i > 2:
             break
