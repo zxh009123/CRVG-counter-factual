@@ -208,3 +208,47 @@ def eval_model(
     #     grd_global_descriptor = grd_global_descriptor
     # )
     return sat_global_descriptor, grd_global_descriptor
+
+
+
+
+class SingleHooker(object):
+    def __init__(self):
+        self.meta_data = {}
+        self.holder = {"sat":[], "grd":[]}
+        self._formatted = False
+
+    def register_attn_hook(self, amodule):
+        assert isinstance(amodule, SAFA_TR) #now only for SAFA_TR model
+
+        def set_attn_hook(key):
+            def attn_hook(module, input, output):
+                _, attn = output
+                self.holder[key].append(attn.detach().cpu().numpy())
+            return attn_hook
+
+        amodule.spatial_aware_sat.register_forward_hook(set_attn_hook("sat"))
+        amodule.spatial_aware_grd.register_forward_hook(set_attn_hook("grd"))
+
+    def update_meta_data(self, k, v):
+        self.meta_data.update({k: v})
+
+    def _formatting(self):
+        self._formatted = True
+        for k, v in self.holder.items():
+            self.holder[k] = np.concatenate(v, axis=0)
+
+    def get_results(self, verbose=False):
+        if not self._formatted:
+            self._formatting()
+        if verbose:
+            return self.holder, self.meta_data
+        else:
+            return self.holder
+
+    def save_results(self, fname=None):
+        if not self._formatted:
+            self._formatting()
+        if fname is None:
+            fname = "results.npz"
+        np.savez_compressed(fname, holder = self.holder, meta_data=self.meta_data)
