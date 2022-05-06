@@ -107,17 +107,14 @@ class SA(nn.Module):
     def __init__(self, in_dim, safa_heads=8, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos'):
         super().__init__()
 
-        self.tr_layers = tr_layers
-
         hid_dim = in_dim // 2
         self.w1, self.b1 = self.init_weights_(in_dim, hid_dim, safa_heads)
         self.w2, self.b2 = self.init_weights_(hid_dim, in_dim, safa_heads)
         self.pos = pos
-        if self.tr_layers != 0:
-            if pos == 'learn_pos':
-                self.safa_tr = SA_TR(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
-            else:
-                self.safa_tr = Transformer(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
+        if pos == 'learn_pos':
+            self.safa_tr = SA_TR(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
+        else:
+            self.safa_tr = Transformer(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
 
     def init_weights_(self, din, dout, dnum):
         # weight = torch.empty(din, dout, dnum)
@@ -138,11 +135,10 @@ class SA(nn.Module):
 
         mask = torch.einsum('bi, idj -> bdj', mask, self.w1) + self.b1
 
-        if self.tr_layers != 0:
-            if self.pos == 'learn_pos':
-                mask = self.safa_tr(mask, pos_normalized)
-            else:
-                mask = self.safa_tr(mask)
+        if self.pos == 'learn_pos':
+            mask = self.safa_tr(mask, pos_normalized)
+        else:
+            mask = self.safa_tr(mask)
 
         mask = torch.einsum('bdj, jdi -> bdi', mask, self.w2) + self.b2
         mask = mask.permute(0,2,1)
@@ -151,7 +147,7 @@ class SA(nn.Module):
 
 
 
-class SAFA_TR(nn.Module):
+class SAFA_TR_VIS(nn.Module):
     def __init__(self, safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos'):
         super().__init__()
 
@@ -182,31 +178,15 @@ class SAFA_TR(nn.Module):
         grd_sa = self.spatial_aware_grd(grd_x)
         sat_sa = F.hardtanh(sat_sa)
         grd_sa = F.hardtanh(grd_sa)
-        if is_cf:
-            fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1, 1)
-            fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1, 1)
+        
 
-            sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
-            grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
+        sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
+        grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
 
-            sat_global = F.normalize(sat_global, p=2, dim=1)
-            grd_global = F.normalize(grd_global, p=2, dim=1)
+        sat_global = F.normalize(sat_global, p=2, dim=1)
+        grd_global = F.normalize(grd_global, p=2, dim=1)
 
-            fake_sat_global = torch.matmul(sat_x, fake_sat_sa).view(b,-1)
-            fake_grd_global = torch.matmul(grd_x, fake_grd_sa).view(b,-1)
-
-            fake_sat_global = F.normalize(fake_sat_global, p=2, dim=1)
-            fake_grd_global = F.normalize(fake_grd_global, p=2, dim=1)
-
-            return sat_global, grd_global, fake_sat_global, fake_grd_global
-        else:
-            sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
-            grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
-
-            sat_global = F.normalize(sat_global, p=2, dim=1)
-            grd_global = F.normalize(grd_global, p=2, dim=1)
-
-            return sat_global, grd_global
+        return sat_global, grd_global, sat_sa, grd_sa
 
 if __name__ == "__main__":
     model = SAFA_TR(safa_heads=12, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True)
