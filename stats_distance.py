@@ -36,6 +36,8 @@ if __name__ == "__main__":
     config = ReadConfig(opt.model_path)
     for k,v in config.items():
         if k in args_do_not_overide:
+            if k == "model":
+                origin_model = k
             continue
         setattr(opt, k, v)
     print(opt, flush=True)
@@ -77,7 +79,7 @@ if __name__ == "__main__":
             sat_global_descriptor, grd_global_descriptor = eval_model(model, validateloader, embedding_dims, device, opt.verbose)
 
             epoch = a_model.split("/")[0]
-            file_name=f"./stats_distance_{opt.model}_{opt.dataset}_{epoch}"
+            file_name=f"./stats_distance_{opt.model}_{opt.dataset}_{epoch}_{origin_model}_{opt.geo_aug}_{opt.sem_aug}"
             file_name += ".npz" if opt.suffix is None else f"_{opt.suffix}.npz"
             valAcc = distancestat(sat_global_descriptor, grd_global_descriptor, fname=file_name)
             print(f"-----------validation result {epoch}---------------", flush=True)
