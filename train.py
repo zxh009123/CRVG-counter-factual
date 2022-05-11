@@ -7,10 +7,10 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 from dataset.usa_dataset import ImageDataset, USADataset
 # from dataset.act_dataset import TestDataset, TrainDataset
-if os.environ["USER"] == "xyli1905":
-    from dataset.act_dataset_cluster import ACTDataset
-else:
-    from dataset.act_dataset import ACTDataset
+# if os.environ["USER"] == "xyli1905":
+#     from dataset.act_dataset_cluster import ACTDataset
+# else:
+from dataset.act_dataset import ACTDataset
 from torch.utils.tensorboard import SummaryWriter
 
 
