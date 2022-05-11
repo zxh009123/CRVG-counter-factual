@@ -7,10 +7,10 @@ from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
 from dataset.usa_dataset import ImageDataset, USADataset
 # from dataset.act_dataset import TestDataset, TrainDataset
-# if os.environ["USER"] == "xyli1905":
-#     from dataset.act_dataset_cluster import ACTDataset
-# else:
-from dataset.act_dataset import ACTDataset
+if os.environ["USER"] == "xyli1905":
+    from dataset.act_dataset_cluster import ACTDataset
+else:
+    from dataset.act_dataset import ACTDataset
 from torch.utils.tensorboard import SummaryWriter
 
 
@@ -272,10 +272,10 @@ if __name__ == "__main__":
                 else:
                     sat_global, grd_global = model(sat, grd, is_cf)
                 # soft margin triplet loss
-                #if opt.dataset == "CVUSA":
+                # if opt.dataset == "CVUSA":
                 triplet_loss = softMarginTripletLoss(sate_vecs=sat_global, pano_vecs=grd_global, loss_weight=gamma)
-                #elif opt.dataset == "CVACT":
-                    #triplet_loss = softMarginTripletLossACT(sate_vecs=sat_global, pano_vecs=grd_global, utm=batch['utm'], loss_weight=gamma)
+                # elif opt.dataset == "CVACT":
+                #     triplet_loss = softMarginTripletLossACT(sate_vecs=sat_global, pano_vecs=grd_global, utm=batch['utm'], loss_weight=gamma)
                 loss = triplet_loss
 
                 epoch_triplet_loss += loss.item()
