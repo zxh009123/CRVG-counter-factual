@@ -129,7 +129,7 @@ class SA(nn.Module):
 
     def forward(self, x):
         channel = x.shape[1]
-        mask, pos = x.max(1)
+        mask, pos = x.max(1) #[B, 1, 8, 42]
 
         pos_normalized = pos / channel
 
@@ -172,6 +172,8 @@ class SAFA_TR_VIS(nn.Module):
         sat_x = self.backbone_sat(sat)
         grd_x = self.backbone_grd(grd)
 
+        # print(sat_x.shape)
+
         sat_x = sat_x.view(b, sat_x.shape[1], -1)
         grd_x = grd_x.view(b, grd_x.shape[1], -1)
         sat_sa = self.spatial_aware_sat(sat_x)
@@ -186,7 +188,7 @@ class SAFA_TR_VIS(nn.Module):
         sat_global = F.normalize(sat_global, p=2, dim=1)
         grd_global = F.normalize(grd_global, p=2, dim=1)
 
-        return sat_global, grd_global, sat_sa, grd_sa
+        return sat_global, grd_global, sat_sa, grd_sa, sat_x, grd_x
 
 if __name__ == "__main__":
     model = SAFA_TR(safa_heads=12, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True)

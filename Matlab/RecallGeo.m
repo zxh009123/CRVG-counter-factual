@@ -2,7 +2,7 @@ clear all;
 close all;
 clc;
 
-desc_path = 'descriptors_strong_strong.mat';
+desc_path = 'descriptors_ss.mat';
 disp(desc_path)
 
 desc = load(desc_path)

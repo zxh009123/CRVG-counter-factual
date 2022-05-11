@@ -114,7 +114,7 @@ if __name__ == "__main__":
     
     if opt.dataset == 'CVACT':
         data_path = os.path.join(opt.data_dir, 'CVACT')
-        dataset = ACTDataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='test')
+        dataset = ACTDataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
         validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
     if opt.dataset == 'CVUSA':
         data_path = os.path.join(opt.data_dir, 'CVUSA', 'dataset')
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     model.to(device)
 
     best_model = GetBestModel(opt.model_path)
-    # best_epoch = 'last'
+    # best_epoch = '86'
     # best_model = os.path.join('epoch_'+str(best_epoch), 'epoch_'+str(best_epoch)+'.pth')
     best_model = os.path.join(opt.model_path, best_model)
     print("loading model : ", best_model)

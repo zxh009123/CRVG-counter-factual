@@ -13,7 +13,7 @@ import PIL
 from PIL import Image
 import torchvision.transforms as transforms
 from torchvision.utils import save_image
-
+import matplotlib.pyplot as plt
 from models.SAFA_TR_VIS import SAFA_TR_VIS
 
 
@@ -135,11 +135,30 @@ if __name__ == "__main__":
             grd = transforms_(Image.open(os.path.join('/mnt/CVUSA/dataset/', grd))).unsqueeze(0)
 
 
-            sat_global, grd_global, sat_discriptors, grd_discriptors = model(sat, grd, is_cf=False)
+            sat_global, grd_global, sat_discriptors, grd_discriptors, sat_raw, grd_raw = model(sat, grd, is_cf=False)
+
+            # sat_raw_mean = torch.mean(sat_raw, dim=1)
+            # grd_raw_mean = torch.mean(grd_raw, dim=1)
+
+            # sat_raw_max, _ = torch.max(sat_raw, dim=1)
+            # grd_raw_max, _ = torch.max(grd_raw, dim=1)
+
+            # sat_raw_mean = sat_raw_mean.view(1, 8, 42).unsqueeze(0) / sat_raw_mean.max()
+            # grd_raw_mean = grd_raw_mean.view(1, 8, 42).unsqueeze(0) / grd_raw_mean.max()
+            # print(sat_raw.shape)
+
+            # sat_raw_max = sat_raw_max.view(1, 8, 42).unsqueeze(0) / sat_raw_max.max()
+            # grd_raw_max = grd_raw_max.view(1, 8, 42).unsqueeze(0) / grd_raw_max.max()
+
+            # sat_raw_mean = F.interpolate(sat_raw_mean, size = (64, 336))
+            # grd_raw_mean = F.interpolate(grd_raw_mean, size = (64, 336))
+
+            # sat_raw_max = F.interpolate(sat_raw_max, size = (64, 336))
+            # grd_raw_max = F.interpolate(grd_raw_max, size = (64, 336))
 
 
-            sat_discriptors = sat_discriptors.view(1, 7, 48, 8)
-            grd_discriptors = grd_discriptors.view(1, 7, 48, 8)
+            sat_discriptors = sat_discriptors.view(1, 8, 42, 8)
+            grd_discriptors = grd_discriptors.view(1, 8, 42, 8)
 
             sat_discriptors = sat_discriptors.permute(3,0,1,2)
             grd_discriptors = grd_discriptors.permute(3,0,1,2)
@@ -147,13 +166,55 @@ if __name__ == "__main__":
             sat_discriptors = (sat_discriptors + 1.0) / 2.0
             grd_discriptors = (grd_discriptors + 1.0) / 2.0
 
-            discriptor_diff = sat_discriptors - grd_discriptors
+            # discriptor_diff = sat_discriptors - grd_discriptors
 
-            sat_discriptors = F.interpolate(sat_discriptors, size = (56, 384))
-            grd_discriptors = F.interpolate(grd_discriptors, size = (56, 384))
-            discriptor_diff = F.interpolate(discriptor_diff, size = (56, 384))
+            sat_discriptors = F.interpolate(sat_discriptors, size = (64, 336))
+            grd_discriptors = F.interpolate(grd_discriptors, size = (64, 336))
+            # discriptor_diff = F.interpolate(discriptor_diff, size = (64, 336))
 
 
-            save_image(sat_discriptors, f'/mnt/visualize/{i}_sat.png', nrow = 1)
-            save_image(grd_discriptors, f'/mnt/visualize/{i}_grd.png', nrow = 1)
-            save_image(discriptor_diff, f'/mnt/visualize/{i}_diff.png', nrow = 1)
+            # save_image(sat_discriptors, f'/mnt/visualize/{i}_sat.png', nrow = 1)
+            # save_image(grd_discriptors, f'/mnt/visualize/{i}_grd.png', nrow = 1)
+            # save_image(discriptor_diff, f'/mnt/visualize/{i}_diff.png', nrow = 1)
+            # save_image(sat_raw_mean, f'/mnt/visualize/{i}_raw_sat_mean.png', nrow = 1)
+            # save_image(grd_raw_mean, f'/mnt/visualize/{i}_raw_grd_mean.png', nrow = 1)
+            # save_image(sat_raw_max, f'/mnt/visualize/{i}_raw_sat_max.png', nrow = 1)
+            # save_image(grd_raw_max, f'/mnt/visualize/{i}_raw_grd_max.png', nrow = 1)
+
+            grd_discriptors = grd_discriptors.detach().cpu().numpy()
+            sat_discriptors = sat_discriptors.detach().cpu().numpy()
+            discriptor_diff = np.absolute(sat_discriptors - grd_discriptors)
+
+            # print(type(grd_discriptors))
+            # print(type(sat_discriptors))
+
+            # print(grd_discriptors.shape)
+            # print(sat_discriptors.shape)
+            fig, axs = plt.subplots(8, 3, sharey=True, sharex=True)
+            for p in range(grd_discriptors.shape[0]):
+                # axs[p,0].imshow(grd_discriptors[p,0,:,:], cmap='hot', interpolation='nearest')
+                # axs[p,1].imshow(sat_discriptors[p,0,:,:], cmap='hot', interpolation='nearest')
+                # axs[p,0].axis('off')
+                # axs[p,1].axis('off')
+
+
+                pcm = axs[p,0].pcolormesh(grd_discriptors[p,0,:,:], cmap='plasma')
+                _ = axs[p,1].pcolormesh(sat_discriptors[p,0,:,:], cmap='plasma')
+                _ = axs[p,2].pcolormesh(discriptor_diff[p,0,:,:], cmap='plasma')
+                
+                descriptor_index = p+1
+                ordinal = lambda n: "%d%s" % (n,"tsnrhtdd"[(n//10%10!=1)*(n%10<4)*n%10::4])
+                axs[p,0].set_ylabel(f'{ordinal(descriptor_index)}', rotation=45)
+
+                if p == 7:
+                    axs[p,0].set_xlabel('Ground descriptors')
+                    axs[p,1].set_xlabel('Aerial descriptors')
+                    axs[p,2].set_xlabel('Difference')
+                axs[p,0].set_yticklabels([])
+                axs[p,0].set_xticklabels([])
+                axs[p,0].tick_params(direction='out', length=1, width=1)
+                axs[p,1].tick_params(direction='out', length=1, width=1)
+                axs[p,2].tick_params(direction='out', length=1, width=1)
+
+            fig.colorbar(pcm, ax=axs[:, :], shrink=1.0)
+            fig.savefig(f'/mnt/visualize/{i}_descriptors.png')

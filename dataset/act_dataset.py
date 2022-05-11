@@ -281,15 +281,15 @@ if __name__ == "__main__":
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
-    dataloader = DataLoader(ACTDataset(data_dir='/mnt/CVACT/', geometric_aug='strong', sematic_aug='strong', is_polar=True, mode='train'),batch_size=4, shuffle=True, num_workers=8)
+    dataloader = DataLoader(ACTDataset(data_dir='../scratch/CVACT/', geometric_aug='none', sematic_aug='none', is_polar=True, mode='train'),batch_size=4, shuffle=False, num_workers=8)
 
     i = 0
     for k in dataloader:
         i += 1
         print("---batch---")
-        print("satellite : ", k['satellite'].shape)
-        print("grd : ", k['ground'].shape)
-        print("grd : ", k['utm'])
+        print("satellite : ", k['satellite'][0,:,1,1])
+        print("grd : ", k['ground'][0,:,1,1])
+        print("utm : ", k['utm'])
         print("-----------")
         if i > 2:
             break

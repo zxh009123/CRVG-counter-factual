@@ -223,8 +223,8 @@ class SingleHooker(object):
 
         def set_attn_hook(key):
             def attn_hook(module, input, output):
-                _, attn = output
-                self.holder[key].append(attn.detach().cpu().numpy())
+                # _, attn = output
+                self.holder[key].append(output.detach().cpu().numpy())
             return attn_hook
 
         amodule.spatial_aware_sat.register_forward_hook(set_attn_hook("sat"))
