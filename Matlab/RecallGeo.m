@@ -2,7 +2,7 @@ clear all;
 close all;
 clc;
 
-desc_path = 'descriptors_ss.mat';
+desc_path = 'nn_noPolar.mat';
 disp(desc_path)
 
 desc = load(desc_path)

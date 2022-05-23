@@ -57,8 +57,8 @@ if __name__ == "__main__":
         model_list = GetAllModel(opt.model_path)
 
     data_dir_dict = {
-        "CVUSA": "/OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVUSA/",
-        "CVACT": "/OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVACT/",
+        "CVUSA": "../scratch/CVUSA/dataset/",
+        "CVACT": "../scratch/CVACT/",
     }
     if opt.dataset == "both":
         dataset_list = ["CVUSA", "CVACT"]

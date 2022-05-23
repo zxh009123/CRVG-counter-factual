@@ -133,6 +133,7 @@ class SA(nn.Module):
 
         pos_normalized = pos / channel
 
+
         mask = torch.einsum('bi, idj -> bdj', mask, self.w1) + self.b1
 
         if self.pos == 'learn_pos':
@@ -165,6 +166,10 @@ class SAFA_TR_VIS(nn.Module):
 
         self.spatial_aware_sat = SA(in_dim=in_dim_sat, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
 
+    def forward_TR(self, input):
+        sat_sa = self.spatial_aware_sat(input)
+        return sat_sa
+
 
     def forward(self, sat, grd, is_cf):
         b = sat.shape[0]
@@ -180,6 +185,11 @@ class SAFA_TR_VIS(nn.Module):
         grd_sa = self.spatial_aware_grd(grd_x)
         sat_sa = F.hardtanh(sat_sa)
         grd_sa = F.hardtanh(grd_sa)
+
+        # r = torch.randn_like(sat_sa)
+
+        # sat_sa = (sat_sa + r) / torch.max(sat_sa)
+        # grd_sa = (grd_sa + r) / torch.max(grd_sa)
         
 
         sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)

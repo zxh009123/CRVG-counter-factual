@@ -29,6 +29,10 @@ except:
 
 args_do_not_overide = ['data_dir', 'verbose', 'dataset']
 
+def count_parameters(model):
+    params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return params/1000000
+
 def ValidateOne(distArray, topK):
     acc = 0.0
     dataAmount = 0.0
@@ -159,6 +163,9 @@ if __name__ == "__main__":
     print("loading model : ", best_model)
     model.load_state_dict(torch.load(best_model)['model_state_dict'])
 
+    num_params = count_parameters(model)
+    print(f"model parameters : {num_params}M")
+
     print("start testing...")
 
     # valSateFeatures = None
@@ -169,6 +176,10 @@ if __name__ == "__main__":
     val_i = 0
 
     model.eval()
+
+    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    timings=np.zeros((len(validateloader),1))
+    index = 0
     with torch.no_grad():
         for batch in tqdm(validateloader, disable=opt.verbose):
             sat = batch['satellite'].to(device)
@@ -176,12 +187,23 @@ if __name__ == "__main__":
             grd = batch['ground'].to(device)
             # grd = batch['street'][:,batch['street'].shape[1] // 2]
 
+            starter.record()
             sat_global, grd_global = model(sat, grd, is_cf=False)
+            ender.record()
+
+            torch.cuda.synchronize()
+            curr_time = starter.elapsed_time(ender)
+            timings[index] = curr_time
+            index += 1
 
             sat_global_descriptor[val_i: val_i + sat_global.shape[0], :] = sat_global.detach().cpu().numpy()
             grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global.detach().cpu().numpy()
 
             val_i += sat_global.shape[0]
+    
+    mean_syn = np.sum(timings) / len(validateloader)
+    print("average inference time : ",mean_syn)
+
     if opt.validate:
         # valAcc = ValidateAll(valStreetFeature, valSateFeatures)
         valAcc = validatenp(sat_global_descriptor, grd_global_descriptor)
