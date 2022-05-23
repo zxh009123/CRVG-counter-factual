@@ -1,0 +1,24 @@
+#!/bin/sh
+#SBATCH --partition=jupiter
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gres=gpu:1
+#SBATCH --mem=32G
+#SBATCH --time=03-23:59:59
+#SBATCH --job-name=111_USA_ss
+#SBATCH --output=%x_%j.out
+#SBATCH --mail-user=xyli1905@bsbii.cn
+#SBATCH --mail-type=ALL
+
+python train.py \
+--data_dir /OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVUSA/ \
+--dataset CVUSA \
+--model SAFA_TR \
+--SAFA_heads 1 \
+--TR_heads 1 \
+--TR_layers 1 \
+--save_suffix 111_USA_ss \
+--geo_aug strong \
+--sem_aug strong \
+--cf 
