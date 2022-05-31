@@ -28,6 +28,8 @@ class GeoDTRmdes(SAFA_TR):
         )
         if des_path is None:
             self._random_des()
+        elif des_path == "one_des":
+            self._one_des()
         else:
             self._load_des(des_path)
         self.allindevice = False
@@ -35,6 +37,10 @@ class GeoDTRmdes(SAFA_TR):
     def _random_des(self):
         self.sat_sa = torch.zeros(336, 8).uniform_(-1., 1.)
         self.grd_sa = torch.zeros(336, 8).uniform_(-1., 1.)
+
+    def _one_des(self):
+        self.sat_sa = torch.ones(336, 8)
+        self.grd_sa = torch.ones(336, 8)
 
     def _load_des(self, des_path):
         # self.sat_sa
