@@ -26,8 +26,15 @@ class GeoDTRmdes(SAFA_TR):
             is_polar = is_polar,
             pos = pos
         )
-        self._load_des(des_path)
+        if des_path is None:
+            self._random_des()
+        else:
+            self._load_des(des_path)
         self.allindevice = False
+
+    def _random_des(self):
+        self.sat_sa = torch.zeros(336, 8).uniform_(-1., 1.)
+        self.grd_sa = torch.zeros(336, 8).uniform_(-1., 1.)
 
     def _load_des(self, des_path):
         # self.sat_sa
