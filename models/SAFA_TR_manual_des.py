@@ -53,8 +53,8 @@ class GeoDTRmdes(SAFA_TR):
         sat_x = sat_x.view(b, sat_x.shape[1], -1)
         grd_x = grd_x.view(b, grd_x.shape[1], -1)
     
-        sat_sa = torch.tile(self.sat_sa, (b, 1, 1))
-        grd_sa = torch.tile(self.grd_sa, (b, 1, 1))
+        sat_sa = self.sat_sa.repeat(b, 1, 1)
+        grd_sa = self.grd_sa.repeat(b, 1, 1)
 
         sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
         grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
