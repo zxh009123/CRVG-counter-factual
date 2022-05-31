@@ -30,7 +30,7 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
     parser.add_argument('--suffix', type=str, default=None)
-    parser.add_argument('--des_path', type=str, help='path to saved descriptors (np.ndarray)')
+    parser.add_argument('--des_path', type=str, default=None, help='path to saved descriptors (np.ndarray)')
 
     opt = parser.parse_args()
 
