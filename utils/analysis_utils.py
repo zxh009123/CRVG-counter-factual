@@ -220,16 +220,30 @@ class SingleHooker(object):
         self._formatted = False
 
     def register_attn_hook(self, amodule):
-        assert isinstance(amodule, SAFA_TR) #now only for SAFA_TR model
+        if isinstance(amodule, SAFA_TR): #now only for SAFA_TR model
 
-        def set_attn_hook(key):
-            def attn_hook(module, input, output):
-                # _, attn = output
-                self.holder[key].append(output.detach().cpu().numpy())
-            return attn_hook
+            def set_attn_hook(key):
+                def attn_hook(module, input, output):
+                    # _, attn = output
+                    self.holder[key].append(output.detach().cpu().numpy())
+                return attn_hook
 
-        amodule.spatial_aware_sat.register_forward_hook(set_attn_hook("sat"))
-        amodule.spatial_aware_grd.register_forward_hook(set_attn_hook("grd"))
+            amodule.spatial_aware_sat.register_forward_hook(set_attn_hook("sat"))
+            amodule.spatial_aware_grd.register_forward_hook(set_attn_hook("grd"))
+        
+        elif isinstance(amodule, torch.nn.DataParallel):
+
+            def set_attn_hook(key):
+                def attn_hook(module, input, output):
+                    # _, attn = output
+                    self.holder[key].append(output.detach().cpu().numpy())
+                return attn_hook
+
+            amodule.module.spatial_aware_sat.register_forward_hook(set_attn_hook("sat"))
+            amodule.module.spatial_aware_grd.register_forward_hook(set_attn_hook("grd"))
+        
+        else:
+            raise ValueError(f"not applicable instance")
 
     def update_meta_data(self, k, v):
         self.meta_data.update({k: v})
@@ -260,16 +274,24 @@ class DesHook(object):
         self.des_holder = {"sat": None, "grd": None}
     
     def register_des_hook(self, amodule):
-        assert isinstance(amodule, SAFA_TR) 
-
         def set_des_hook(key):
             def des_hook(module, input, output):
                 des = F.hardtanh(output)
                 self.des_holder[key] = des[0].detach().cpu().numpy() #[0] for batch dim
             return des_hook
 
-        amodule.spatial_aware_sat.register_forward_hook(set_des_hook("sat"))
-        amodule.spatial_aware_grd.register_forward_hook(set_des_hook("grd"))
+        if isinstance(amodule, SAFA_TR):
+
+            amodule.spatial_aware_sat.register_forward_hook(set_des_hook("sat"))
+            amodule.spatial_aware_grd.register_forward_hook(set_des_hook("grd"))
+
+        elif isinstance(amodule, torch.nn.DataParallel):
+
+            amodule.module.spatial_aware_sat.register_forward_hook(set_des_hook("sat"))
+            amodule.module.spatial_aware_grd.register_forward_hook(set_des_hook("grd"))
+        
+        else:
+            raise ValueError(f"not applicable instance")
 
     def get_results(self):
         return self.des_holder

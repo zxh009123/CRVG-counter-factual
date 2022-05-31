@@ -10,7 +10,7 @@ from utils.analysis_utils import (
 )
 
 
-args_do_not_overide = ['data_dir', 'verbose', 'dataset', "model"]
+args_do_not_overide = ['data_dir', 'verbose', 'dataset', "model", "suffix"]
 
 
 if __name__ == "__main__":
@@ -82,4 +82,6 @@ if __name__ == "__main__":
                     break
 
             epoch = a_model.split("/")[0]
-            deshook.save_results(fname=f"des_{opt.model}_{epoch}_{origin_dataset}_{opt.geo_aug}_{opt.sem_aug}_{ds}.npz")
+            fname = f"des_{opt.model}_{epoch}_{origin_dataset}_{opt.geo_aug}_{opt.sem_aug}_{ds}"
+            fname += ".npz" if opt.suffix is None else f"_{opt.suffix}.npz"
+            deshook.save_results(fname = fname)
