@@ -3,6 +3,7 @@ from tqdm import tqdm
 import numpy as np
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from dataset.usa_dataset import USADataset
 from dataset.act_dataset import ACTDataset
@@ -252,3 +253,28 @@ class SingleHooker(object):
         if fname is None:
             fname = "results.npz"
         np.savez_compressed(fname, holder = self.holder, meta_data=self.meta_data)
+
+
+class DesHook(object):
+    def __init__(self) -> None:
+        self.des_holder = {"sat": None, "grd": None}
+    
+    def register_des_hook(self, amodule):
+        assert isinstance(amodule, SAFA_TR) 
+
+        def set_des_hook(key):
+            def des_hook(module, input, output):
+                des = F.hardtanh(output)
+                self.des_holder[key] = des[0].detach().cpu().numpy() #[0] for batch dim
+            return des_hook
+
+        amodule.spatial_aware_sat.register_forward_hook(set_des_hook("sat"))
+        amodule.spatial_aware_grd.register_forward_hook(set_des_hook("grd"))
+
+    def get_results(self):
+        return self.des_holder
+
+    def save_results(self, fname=None):
+        if fname is None:
+            fname = "descriptors.npz"
+        np.savez_compressed(fname, des_holder = self.des_holder)
