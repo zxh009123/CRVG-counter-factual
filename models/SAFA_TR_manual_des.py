@@ -8,22 +8,22 @@ from .SAFA_TR import SAFA_TR
 class GeoDTRmdes(SAFA_TR):
     def __init__(
         self, 
-        in_dim, 
         safa_heads = 8, 
         tr_heads = 4, 
         tr_layers = 2, 
         dropout = 0.3, 
         d_hid = 2048, 
-        pos = 'learn_pos',
+        is_polar = True, 
+        pos='learn_pos',
         des_path = None
     ):
         super(GeoDTRmdes, self).__init__(
-            in_dim = in_dim, 
             safa_heads = safa_heads, 
             tr_heads = tr_heads, 
             tr_layers = tr_layers, 
             dropout = dropout, 
             d_hid = d_hid, 
+            is_polar = is_polar,
             pos = pos
         )
         self._load_des(des_path)
