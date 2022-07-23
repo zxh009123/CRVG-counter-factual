@@ -11,6 +11,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+from models.SAFA_TR_manual_des import GeoDTRmdes
 from utils.utils import ReadConfig, distancestat
 from utils.analysis_utils import (
     GetBestModel,
@@ -49,9 +50,23 @@ if __name__ == "__main__":
         setattr(opt, k, v)
     print(opt, flush=True)
 
+    polar_transformation = not opt.no_polar
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-    model, embedding_dims = set_model(opt)
+    # model, embedding_dims = set_model(opt)
+    # model = nn.DataParallel(model)
+    # model.to(device)
+    model = GeoDTRmdes(
+        safa_heads = opt.SAFA_heads, 
+        tr_heads = opt.TR_heads, 
+        tr_layers = opt.TR_layers, 
+        dropout = opt.dropout, 
+        d_hid = opt.TR_dim, 
+        is_polar = polar_transformation, 
+        pos = opt.pos,
+        des_path = "one_des"
+    )
+    embedding_dims = opt.SAFA_heads * 512
     model = nn.DataParallel(model)
     model.to(device)
 
@@ -60,7 +75,7 @@ if __name__ == "__main__":
     print(f"loading model : {load_model}", flush=True)
     model.load_state_dict(torch.load(load_model)['model_state_dict'])
 
-    print("start testing...", flush=True)
+    print("start testing with ONE descriptors...", flush=True)
 
     data_dir_dict = {
         # "CVUSA": "/OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVUSA/",
@@ -75,7 +90,7 @@ if __name__ == "__main__":
 
 
     for ds in dataset_list:
-        print(f"\ntesting on {ds}...", flush=True)
+        print(f"\ntesting with ONE descriptors on {ds}...", flush=True)
         setattr(opt, "dataset", ds)
         setattr(opt, "data_dir", data_dir_dict[ds])
         validateloader = set_dataset(opt, mode="val")
@@ -85,7 +100,7 @@ if __name__ == "__main__":
         sg_dist = 2.0 - 2.0 * np.matmul(sat_global_descriptor, grd_global_descriptor.T)
         gg_dist = 2.0 - 2.0 * np.matmul(grd_global_descriptor, grd_global_descriptor.T)
 
-        fname = f"stats_corr_dist_{opt.model}_test{opt.dataset}_train{origin_dataset}_{opt.geo_aug}_{opt.sem_aug}"
+        fname = f"stats_corr_dist_{opt.model}_onedes_test{opt.dataset}_train{origin_dataset}_{opt.geo_aug}_{opt.sem_aug}"
         fname += ".npz" if opt.suffix is None else f"_{opt.suffix}.npz"
         np.savez_compressed(
             fname,
