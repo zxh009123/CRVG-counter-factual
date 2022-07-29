@@ -63,8 +63,8 @@ if __name__ == "__main__":
     print("start testing...", flush=True)
 
     data_dir_dict = {
-        "CVUSA": "/OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVUSA/",
-        "CVACT": "/OceanStor100D/home/zhouyi_lab/xyli1905/dataset/Dataset_/cross-view/CVACT/",
+        "CVUSA": "../scratch/CVUSA/dataset",
+        "CVACT": "../scratch/CVACT/",
     }
     if opt.dataset == "both":
         dataset_list = ["CVUSA", "CVACT"]
@@ -79,6 +79,7 @@ if __name__ == "__main__":
         validateloader = set_dataset(opt, mode="val")
 
         sat_global_descriptor, grd_global_descriptor = eval_model(model, validateloader, embedding_dims, device, opt.verbose)
+
         ss_dist = 2.0 - 2.0 * np.matmul(sat_global_descriptor, sat_global_descriptor.T)
         sg_dist = 2.0 - 2.0 * np.matmul(sat_global_descriptor, grd_global_descriptor.T)
         gg_dist = 2.0 - 2.0 * np.matmul(grd_global_descriptor, grd_global_descriptor.T)

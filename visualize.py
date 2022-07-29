@@ -91,7 +91,6 @@ def GetBestModel(path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_path', type=str, help='path to model weights')
-    parser.add_argument('--test_img_path', type=str, help='path to test images')
 
     opt = parser.parse_args()
 
@@ -162,7 +161,9 @@ if __name__ == "__main__":
     transforms_sat = transforms.Compose(transforms_sat)
     transforms_street = transforms.Compose(transforms_street)
 
-    csv_file = '/mnt/CVUSA/dataset/splits/train-19zl.csv'
+    base_dir = '../scratch/CVUSA/dataset/'
+
+    csv_file = os.path.join(base_dir, 'splits/train-19zl.csv')
 
     img_pairs = []
     csv_file = open(csv_file)
@@ -182,12 +183,12 @@ if __name__ == "__main__":
     with torch.no_grad():
         for i, batch in tqdm(enumerate(img_pairs)):
             sat = batch[0]
-            sat = transforms_sat(Image.open(os.path.join('/mnt/CVUSA/dataset/', sat))).unsqueeze(0)
+            sat = transforms_sat(Image.open(os.path.join(base_dir, sat))).unsqueeze(0)
             # sat = (torch.randn_like(sat) / 0.5 + 0.5)
             # sat = torch.zeros_like(sat)
             
             grd = batch[1]
-            grd = transforms_street(Image.open(os.path.join('/mnt/CVUSA/dataset/', grd))).unsqueeze(0)
+            grd = transforms_street(Image.open(os.path.join(base_dir, grd))).unsqueeze(0)
             # grd = (torch.randn_like(grd) / 0.5 + 0.5)
             # grd = torch.zeros_like(grd)
 
@@ -309,9 +310,9 @@ if __name__ == "__main__":
                 
  
             fig.colorbar(pcm, ax=axs[:,:], shrink=1.0, aspect=50)
-            fig.savefig(f'/mnt/visualize/{i}_descriptors.png', dpi=300)
+            fig.savefig(f'../scratch/visualize/{i}_descriptors.png', dpi=300)
             sat_save = sat * 0.5 + 0.5
-            save_image(sat_save, f'/mnt/visualize/{i}_sat_input.png')
+            save_image(sat_save, f'../scratch/visualize/{i}_sat_input.png')
             grd_save = grd * 0.5 + 0.5
-            save_image(grd_save, f'/mnt/visualize/{i}_grd_input.png')
+            save_image(grd_save, f'../scratch/visualize/{i}_grd_input.png')
             plt.clf()

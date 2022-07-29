@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.models as models
 import os
+import random
 if os.environ["USER"] == "xyli1905":
     from models.TR import TransformerEncoder, TransformerEncoderLayer
 else:
@@ -183,8 +184,23 @@ class SAFA_TR(nn.Module):
         sat_sa = F.hardtanh(sat_sa)
         grd_sa = F.hardtanh(grd_sa)
         if is_cf:
-            fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1, 1)
-            fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1, 1)
+            # method = random.choice(['random', 'inverse', 'perturb'])
+            # if method == 'random':
+            #     fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1.0, 1.0)
+            #     fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1.0, 1.0)
+            # elif method == 'inverse':
+            #     fake_sat_sa = 0.0 - sat_sa.clone().detach()
+            #     fake_grd_sa = 0.0 - grd_sa.clone().detach()
+            # else:
+            #     fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-0.5, 0.5) + sat_sa
+            #     fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-0.5, 0.5) + grd_sa
+
+            #     fake_sat_sa = torch.clamp(fake_sat_sa, -1.0, 1.0)
+            #     fake_grd_sa = torch.clamp(fake_grd_sa, -1.0, 1.0)
+
+            fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1.0, 1.0)
+            fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1.0, 1.0)
+
 
             sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
             grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
