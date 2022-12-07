@@ -191,6 +191,7 @@ if __name__ == "__main__":
     elif opt.model == "SAFA_TR":
         model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
         embedding_dims = number_SAFA_heads * 512
+        # embedding_dims = number_SAFA_heads * 128
     elif opt.model == "SAFA_TR50":
         model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
         embedding_dims = number_SAFA_heads * 1024 #512

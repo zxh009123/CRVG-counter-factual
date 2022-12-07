@@ -98,7 +98,13 @@ class ResNet34(nn.Module):
         net = models.resnet34(pretrained=True)
         layers = list(net.children())[:3]
         layers_end = list(net.children())[4:-2]
+
+        #4096
         self.layers = nn.Sequential(*layers, *layers_end)
+
+        #1024
+        # end_conv = [torch.nn.Conv2d(512, 128, 1), torch.nn.BatchNorm2d(128)]
+        # self.layers = torch.nn.Sequential(*layers, *layers_end, *end_conv)
 
     def forward(self, x):
         return self.layers(x)
