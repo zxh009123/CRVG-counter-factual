@@ -4,6 +4,8 @@ import torch.nn.functional as F
 import torchvision.models as models
 import os
 import random
+from thop import profile
+from thop import clever_format
 if os.environ["USER"] == "xyli1905":
     from models.TR import TransformerEncoder, TransformerEncoderLayer
 else:
@@ -99,7 +101,13 @@ class ResNet34(nn.Module):
         net = models.resnet34(pretrained=True)
         layers = list(net.children())[:3]
         layers_end = list(net.children())[4:-2]
+
+        # 4096
         self.layers = nn.Sequential(*layers, *layers_end)
+
+        # 1024
+        # end_conv = [torch.nn.Conv2d(512, 128, 1), torch.nn.BatchNorm2d(128)]
+        # self.layers = torch.nn.Sequential(*layers, *layers_end, *end_conv)
 
     def forward(self, x):
         return self.layers(x)
@@ -184,19 +192,6 @@ class SAFA_TR(nn.Module):
         sat_sa = F.hardtanh(sat_sa)
         grd_sa = F.hardtanh(grd_sa)
         if is_cf:
-            # method = random.choice(['random', 'inverse', 'perturb'])
-            # if method == 'random':
-            #     fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1.0, 1.0)
-            #     fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1.0, 1.0)
-            # elif method == 'inverse':
-            #     fake_sat_sa = 0.0 - sat_sa.clone().detach()
-            #     fake_grd_sa = 0.0 - grd_sa.clone().detach()
-            # else:
-            #     fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-0.5, 0.5) + sat_sa
-            #     fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-0.5, 0.5) + grd_sa
-
-            #     fake_sat_sa = torch.clamp(fake_sat_sa, -1.0, 1.0)
-            #     fake_grd_sa = torch.clamp(fake_grd_sa, -1.0, 1.0)
 
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1.0, 1.0)
             fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1.0, 1.0)
@@ -225,16 +220,22 @@ class SAFA_TR(nn.Module):
             return sat_global, grd_global
 
 if __name__ == "__main__":
-    model = SAFA_TR(safa_heads=12, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=True)
-    sat = torch.randn(7, 3, 122, 671)
+    model = SAFA_TR(safa_heads=8, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=False)
+    sat = torch.randn(1, 3, 256, 256)
     # sat = torch.randn(7, 3, 256, 256)
-    grd = torch.randn(7, 3, 122, 671)
-    result = model(sat, grd, True)
+    grd = torch.randn(1, 3, 122, 671)
+    result = model(sat, grd, False)
+
+    params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(params/1000000.0)
+
     for i in result:
         print(i.shape)
 
-    # model = SA_PE()
-    # x = torch.rand(5, 16, 256)
-    # pos = torch.rand(5, 512)
-    # result = model(x, pos)
+    macs, params = profile(model, inputs=(sat, grd, False, ))
+    macs, params = clever_format([macs, params], "%.3f")
+
+    print(macs)
+    print(params)
+
 
