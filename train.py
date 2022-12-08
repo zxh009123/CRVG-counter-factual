@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import torchvision.transforms as transforms
 from torch.optim import lr_scheduler
 from torch.utils.data import DataLoader
-from dataset.usa_dataset import ImageDataset, USADataset
+from dataset.usa_dataset import USADataset
 # from dataset.act_dataset import TestDataset, TrainDataset
 # if os.environ["USER"] == "xyli1905":
 #     from dataset.act_dataset_cluster import ACTDataset
@@ -23,18 +23,12 @@ import time
 import json
 
 from models.SAFA_TR import SAFA_TR
-from models.SAFA_TR50 import SAFA_TR50
-from models.SAFA_vgg import SAFA_vgg
-from models.TK_SAFF import TK_SAFF
-from models.TK_FFusion import TK_FFusion
-from models.TK_FA_TR import TK_FA_TR
 
 from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
-     CFLoss, save_model, ValidateAll, WarmupCosineSchedule,\
-     ReadConfig, IntraLoss, validatenp, softMarginTripletLossACT
+     CFLoss, save_model, WarmupCosineSchedule,\
+     ReadConfig, validatenp
 
 args_do_not_overide = ['verbose', 'resume_from']
-TR_BASED_MODELS = ['SAFA_TR', 'SAFA_TR50', 'TK_SAFF', 'TK_FFusion', 'TK_FA_TR']
 
 def GetBestModel(path):
     all_files = os.listdir(path)
@@ -42,19 +36,6 @@ def GetBestModel(path):
     config_files = sorted(list(map(lambda x: int(x.split("_")[1]), config_files)), reverse=True)
     best_epoch = config_files[0]
     return os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
-
-def FreezeBackBone(model):
-    freezed_params = []
-    for name, param in model.named_parameters():
-        if "backbone" in name:
-            param.requires_grad = False
-            freezed_params.append(name)
-    # print("Freezed parameters : ", freezed_params)
-
-
-def UnFreezeBackBone(model):
-    for name, param in model.named_parameters():
-        param.requires_grad = True
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -64,7 +45,6 @@ if __name__ == "__main__":
     parser.add_argument("--save_suffix", type=str, default='_aug_strong', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch', help='dir to the dataset')
     parser.add_argument('--dataset', default='CVUSA', choices=['CVUSA', 'CVACT'], help='which dataset to use') 
-    parser.add_argument("--model", type=str, help='model')
     parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
     parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
     parser.add_argument("--TR_layers", type=int, default=8, help='number of layers in Transformer')
@@ -72,21 +52,16 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument("--weight_decay", type=float, default=0.03, help='weight decay value for optimizer')
-    parser.add_argument("--topK", type=int, default=8, help='K value in top-K pooling')
     parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
     parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
-    parser.add_argument('--intra', default=False, action='store_true', help='intra loss')
-    parser.add_argument('--fp16', default=False, action='store_true', help='mixed precision')
-    parser.add_argument('--tkp', default='pool', choices=['pool', 'conv'], help='choose between pool or conv in TKSAFA') 
-    parser.add_argument("--embed_dim", type=int, default=768, help='learned dim for TK_SAFF or TK_FF')
-    parser.add_argument("--project_dim", type=int, default=168, help='Input dim in transformer of TK_FA_TR')
     parser.add_argument('--geo_aug', default='strong', choices=['strong', 'weak', 'none'], help='geometric augmentation strength') 
     parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength') 
 
     opt = parser.parse_args()
+    opt.model = 'SAFA_TR'
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
@@ -115,9 +90,6 @@ if __name__ == "__main__":
     for k, v in hyper_parameter_dict.items():
         print(f"{k} : {v}")
 
-    if opt.fp16: # mixed-precision training
-        # from apex import amp
-        scaler = torch.cuda.amp.GradScaler()
     
     if opt.no_polar:
         SATELLITE_IMG_WIDTH = 256
@@ -161,8 +133,6 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    #dataloader now only support CVUSA
-    # TODO: add support to CVACT
 
     if opt.dataset == "CVUSA":
 
@@ -183,49 +153,17 @@ if __name__ == "__main__":
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
         
-    #To be noticed: safa_heads represent k in topk when SAFA_TR in topk mode
-    #change SAFA_TR mode in uncomment and comment line 233 to 243 in models/SAFA_TR.py 
-    if opt.model == "SAFA_vgg":
-        model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
-        embedding_dims = number_SAFA_heads * 512
-    elif opt.model == "SAFA_TR":
-        model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
-        embedding_dims = number_SAFA_heads * 512
-    elif opt.model == "SAFA_TR50":
-        model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
-        embedding_dims = number_SAFA_heads * 1024 #512
-    elif opt.model == "TK_SAFF" or opt.model == "TK_FFusion" or opt.model == "TK_FA_TR":
-        if opt.tkp == 'conv':
-            TK_Pool = False
-        else:
-            TK_Pool = True
 
-        if opt.model == "TK_SAFF":
-            model = TK_SAFF(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
-            embedding_dims = opt.embed_dim
-        elif opt.model == "TK_FFusion":
-            model = TK_FFusion(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, pos = pos, is_polar=polar_transformation, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
-            embedding_dims = opt.embed_dim
-        elif opt.model == "TK_FA_TR":
-            model = TK_FA_TR(topk=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=2048, pos = 'learn_pos', is_polar=polar_transformation, TKPool=TK_Pool, project_dim=opt.project_dim)
-            embedding_dims = opt.topK * 512
-    else:
-        raise RuntimeError(f"model {opt.model} is not implemented")
+    model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+    embedding_dims = number_SAFA_heads * 512
+    
     model = nn.DataParallel(model)
     model.to(device)
 
     #set optimizer and lr scheduler
-    if opt.model == "SAFA_vgg":
-        optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay)
-        lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.98)
-    elif opt.model in TR_BASED_MODELS:
-        optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay, eps=1e-6)
-        lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
-        
-        # optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay)
-        # lrSchedule = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.97)
-    else:
-        raise RuntimeError("configs not implemented")
+
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay, eps=1e-6)
+    lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
 
 
     start_epoch = 0
@@ -242,21 +180,11 @@ if __name__ == "__main__":
     logger.info("start training...")
     best_epoch = {'acc':0, 'epoch':0}
     for epoch in range(start_epoch, number_of_epoch):
-        
-        # if epoch == 0:
-        #     logger.info("Backbone freezing")
-        #     FreezeBackBone(model)
-        
-        # if epoch == 5:
-        #     logger.info("Backbone unfreezing")
-        #     UnFreezeBackBone(model)
 
         logger.info(f"start epoch {epoch}")
         epoch_triplet_loss = 0
         if is_cf:
             epoch_cf_loss = 0
-        if opt.intra:
-            epoch_it_loss = 0
 
         model.train() # set model to train
         for batch in tqdm(dataloader, disable = opt.verbose):
@@ -266,48 +194,31 @@ if __name__ == "__main__":
             sat = batch['satellite'].to(device)
             grd = batch['ground'].to(device)
 
-            with torch.cuda.amp.autocast(enabled=opt.fp16):
-                if is_cf:
-                    sat_global, grd_global, fake_sat_global, fake_grd_global = model(sat, grd, is_cf)
-                else:
-                    sat_global, grd_global = model(sat, grd, is_cf)
-                # soft margin triplet loss
-                #if opt.dataset == "CVUSA":
-                triplet_loss = softMarginTripletLoss(sate_vecs=sat_global, pano_vecs=grd_global, loss_weight=gamma)
-                #elif opt.dataset == "CVACT":
-                    #triplet_loss = softMarginTripletLossACT(sate_vecs=sat_global, pano_vecs=grd_global, utm=batch['utm'], loss_weight=gamma)
-                loss = triplet_loss
 
-                epoch_triplet_loss += loss.item()
-                
-                if is_cf:# calculate CF loss
-                    CFLoss_sat= CFLoss(sat_global, fake_sat_global)
-                    CFLoss_grd = CFLoss(grd_global, fake_grd_global)
-                    CFLoss_total = (CFLoss_sat + CFLoss_grd) / 2.0
-                    loss += CFLoss_total
-                    epoch_cf_loss += CFLoss_total.item()
-
-                if opt.intra:
-                    it_loss = IntraLoss(sat_global, grd_global, loss_weight=5.0, hard_topk_ratio=1.0)
-                    loss += it_loss
-                    epoch_it_loss += it_loss.item()
-
-            if opt.fp16:
-                scaler.scale(loss).backward()
+            if is_cf:
+                sat_global, grd_global, fake_sat_global, fake_grd_global = model(sat, grd, is_cf)
             else:
-                loss.backward()
+                sat_global, grd_global = model(sat, grd, is_cf)
 
-            if opt.model in TR_BASED_MODELS:
-                if opt.fp16:
-                    scaler.unscale_(optimizer)
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                else:
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            if opt.fp16:
-                scaler.step(optimizer)
-                scaler.update()
-            else:
-                optimizer.step()
+            triplet_loss = softMarginTripletLoss(sate_vecs=sat_global, pano_vecs=grd_global, loss_weight=gamma)
+
+            loss = triplet_loss
+
+            epoch_triplet_loss += loss.item()
+            
+            if is_cf:# calculate CF loss
+                CFLoss_sat= CFLoss(sat_global, fake_sat_global)
+                CFLoss_grd = CFLoss(grd_global, fake_grd_global)
+                CFLoss_total = (CFLoss_sat + CFLoss_grd) / 2.0
+                loss += CFLoss_total
+                epoch_cf_loss += CFLoss_total.item()
+
+            loss.backward()
+
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
+            optimizer.step()
         # adjust lr
         lrSchedule.step()
 
@@ -322,16 +233,10 @@ if __name__ == "__main__":
             print(f"Epoch {epoch} CF_Loss: {current_cf_loss}")
             writer.add_scalar('cf_loss', current_cf_loss, epoch)
         
-        if opt.intra:
-            current_intra_loss = float(epoch_it_loss) / float(len(dataloader))
-            print(f"Epoch {epoch} intra loss: {current_intra_loss}")
-            writer.add_scalar('intra_loss', current_intra_loss, epoch)
             
         print("----------------------")
 
-        # Testing phase
-        # valSateFeatures = None
-        # valStreetFeature = None
+
         sat_global_descriptor = np.zeros([8884, embedding_dims])
         grd_global_descriptor = np.zeros([8884, embedding_dims])
         val_i = 0
@@ -344,21 +249,11 @@ if __name__ == "__main__":
 
                 sat_global, grd_global = model(sat, grd, is_cf=False)
 
-                # if valSateFeatures == None:
-                #     valSateFeatures = sat_global.detach()
-                # else:
-                #     valSateFeatures = torch.cat((valSateFeatures, sat_global.detach()), dim=0)
-
-                # if valStreetFeature == None:
-                #     valStreetFeature = grd_global.detach()
-                # else:
-                #     valStreetFeature = torch.cat((valStreetFeature, grd_global.detach()), dim=0)
                 sat_global_descriptor[val_i: val_i + sat_global.shape[0], :] = sat_global.detach().cpu().numpy()
                 grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global.detach().cpu().numpy()
 
                 val_i += sat_global.shape[0]
 
-            # valAcc = ValidateAll(valStreetFeature, valSateFeatures)
             valAcc = validatenp(sat_global_descriptor, grd_global_descriptor)
             logger.info("validation result")
             print(f"------------------------------------")

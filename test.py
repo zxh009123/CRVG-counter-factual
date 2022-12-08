@@ -5,7 +5,7 @@ import torchvision.transforms as transforms
 from torch.optim import lr_scheduler
 import torchvision.models as models
 from torch.utils.data import DataLoader
-from dataset.usa_dataset import ImageDataset, USADataset
+from dataset.usa_dataset import USADataset
 # from dataset.act_dataset import TestDataset, TrainDataset
 from dataset.act_dataset import ACTDataset
 # from SMTL import softMarginTripletLoss
@@ -15,17 +15,10 @@ import numpy as np
 import argparse
 import json
 import scipy.io as sio
-from utils.utils import ReadConfig, ValidateAll, validatenp
+from utils.utils import ReadConfig, validatenp
 
 from models.SAFA_TR import SAFA_TR
-from models.SAFA_TR50 import SAFA_TR50
-from models.SAFA_vgg import SAFA_vgg
-try:
-    from models.TK_SAFF import TK_SAFF
-    from models.TK_FFusion import TK_FFusion
-    from models.TK_FA_TR import TK_FA_TR
-except:
-    pass
+
 
 args_do_not_overide = ['data_dir', 'verbose', 'dataset']
 
@@ -33,25 +26,6 @@ def count_parameters(model):
     params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return params/1000000
 
-def ValidateOne(distArray, topK):
-    acc = 0.0
-    dataAmount = 0.0
-    for i in range(distArray.shape[0]):
-        groundTruths = distArray[i,i]
-        pred = torch.sum(distArray[:,i] < groundTruths)
-        if pred < topK:
-            acc += 1.0
-        dataAmount += 1.0
-    return acc / dataAmount
-
-def ValidateAll(streetFeatures, satelliteFeatures):
-    distArray = 2 - 2 * torch.matmul(satelliteFeatures, torch.transpose(streetFeatures, 0, 1))
-    topOnePercent = int(distArray.shape[0] * 0.01) + 1
-    valAcc = torch.zeros((1, topOnePercent))
-    for i in range(topOnePercent):
-        valAcc[0,i] = ValidateOne(distArray, i)
-    
-    return valAcc
 
 def GetBestModel(path):
     all_files = os.listdir(path)
@@ -127,32 +101,9 @@ if __name__ == "__main__":
     
     print("number of test samples : ", len(dataset))
 
-    if opt.model == "SAFA_vgg":
-        model = SAFA_vgg(safa_heads = number_SAFA_heads, is_polar=polar_transformation)
-        embedding_dims = number_SAFA_heads * 512
-    elif opt.model == "SAFA_TR":
-        model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
-        embedding_dims = number_SAFA_heads * 512
-    elif opt.model == "SAFA_TR50":
-        model = SAFA_TR50(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
-        embedding_dims = number_SAFA_heads * 512
-    elif opt.model == "TK_SAFF" or opt.model == "TK_FFusion" or opt.model == "TK_FA_TR":
-        if opt.tkp == 'conv':
-            TK_Pool = False
-        else:
-            TK_Pool = True
-
-        if opt.model == "TK_SAFF":
-            model = TK_SAFF(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, is_polar=polar_transformation, pos=pos, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
-            embedding_dims = opt.embed_dim
-        elif opt.model == "TK_FFusion":
-            model = TK_FFusion(top_k=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, pos = pos, is_polar=polar_transformation, TK_Pool=TK_Pool, embed_dim=opt.embed_dim)
-            embedding_dims = opt.embed_dim
-        elif opt.model == "TK_FA_TR":
-            model = TK_FA_TR(topk=opt.topK, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=2048, pos = 'learn_pos', is_polar=polar_transformation, TKPool=TK_Pool, project_dim=opt.project_dim)
-            embedding_dims = opt.topK * 512
-    else:
-        raise RuntimeError(f"model {opt.model} is not implemented")
+    model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
+    embedding_dims = number_SAFA_heads * 512
+    
     model = nn.DataParallel(model)
     model.to(device)
 
@@ -205,7 +156,6 @@ if __name__ == "__main__":
     print("average inference time : ",mean_syn)
 
     if opt.validate:
-        # valAcc = ValidateAll(valStreetFeature, valSateFeatures)
         valAcc = validatenp(sat_global_descriptor, grd_global_descriptor)
         print(f"-----------validation result---------------")
         try:
