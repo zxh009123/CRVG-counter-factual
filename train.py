@@ -152,8 +152,6 @@ if __name__ == "__main__":
         validate_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
-
-
     model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
     embedding_dims = number_SAFA_heads * 512
 
