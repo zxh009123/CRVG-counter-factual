@@ -25,8 +25,7 @@ import json
 from models.SAFA_TR import SAFA_TR
 
 from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
-     CFLoss, save_model, WarmupCosineSchedule,\
-     ReadConfig, validatenp
+     CFLoss, save_model, WarmupCosineSchedule, ReadConfig, validatenp
 
 args_do_not_overide = ['verbose', 'resume_from']
 
