@@ -43,7 +43,8 @@ class PositionalEncoding(nn.Module):
         x = x + self.pe[:x.size(0)]
         return self.dr(x)
 
-class SA_PE(nn.Module):
+# Index-awared (learnable) PE
+class IAPE(nn.Module):
 
     def __init__(self, d_model = 256, max_len = 16, dropout=0.3):
         super().__init__()
@@ -61,29 +62,12 @@ class SA_PE(nn.Module):
         x = x + em_pos
         return self.dr(x)
 
-class Transformer(nn.Module):
+class TRModule(nn.Module):
 
-    def __init__(self, d_model=256, safa_heads = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
+    def __init__(self, d_model=256, descriptors = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
 
-
-        self.pos_encoder = PositionalEncoding(d_model, max_len=safa_heads, dropout=dropout)
-        encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
-        layer_norm = nn.LayerNorm(d_model)
-        self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = nlayers, norm=layer_norm)
-
-
-    def forward(self, src):
-        src = self.pos_encoder(src)
-        output = self.transformer_encoder(src)
-        return output
-
-class SA_TR(nn.Module):
-
-    def __init__(self, d_model=256, safa_heads = 16, nhead=8, nlayers=6, dropout = 0.3, d_hid=2048):
-        super().__init__()
-
-        self.pos_encoder = SA_PE(d_model, max_len=safa_heads, dropout=dropout)
+        self.pos_encoder = IAPE(d_model, max_len = descriptors, dropout=dropout)
         encoder_layers = TransformerEncoderLayer(d_model, nhead, d_hid, dropout, activation='gelu', batch_first=True)
         layer_norm = nn.LayerNorm(d_model)
         self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = nlayers, norm=layer_norm)
@@ -112,21 +96,17 @@ class ResNet34(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
-class SA(nn.Module):
-    def __init__(self, in_dim, safa_heads=8, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, pos = 'learn_pos'):
+class GeoLayoutExtractor(nn.Module):
+    def __init__(self, in_dim, descriptors=8, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
 
         self.tr_layers = tr_layers
 
         hid_dim = in_dim // 2
-        self.w1, self.b1 = self.init_weights_(in_dim, hid_dim, safa_heads)
-        self.w2, self.b2 = self.init_weights_(hid_dim, in_dim, safa_heads)
-        self.pos = pos
+        self.w1, self.b1 = self.init_weights_(in_dim, hid_dim, descriptors)
+        self.w2, self.b2 = self.init_weights_(hid_dim, in_dim, descriptors)
         if self.tr_layers != 0:
-            if pos == 'learn_pos':
-                self.safa_tr = SA_TR(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
-            else:
-                self.safa_tr = Transformer(d_model=hid_dim, safa_heads=safa_heads, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
+            self.tr_module = TRModule(d_model=hid_dim, descriptors=descriptors, nhead=tr_heads, nlayers=tr_layers, dropout=dropout,d_hid=d_hid)
 
     def init_weights_(self, din, dout, dnum):
         # weight = torch.empty(din, dout, dnum)
@@ -148,10 +128,7 @@ class SA(nn.Module):
         mask = torch.einsum('bi, idj -> bdj', mask, self.w1) + self.b1
 
         if self.tr_layers != 0:
-            if self.pos == 'learn_pos':
-                mask = self.safa_tr(mask, pos_normalized)
-            else:
-                mask = self.safa_tr(mask)
+            mask = self.tr_module(mask, pos_normalized)
 
         mask = torch.einsum('bdj, jdi -> bdi', mask, self.w2) + self.b2
         mask = mask.permute(0,2,1)
@@ -160,8 +137,8 @@ class SA(nn.Module):
 
 
 
-class SAFA_TR(nn.Module):
-    def __init__(self, safa_heads=16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, pos='learn_pos'):
+class GeoDTR(nn.Module):
+    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True):
         super().__init__()
 
         self.backbone_grd = ResNet34()
@@ -174,9 +151,9 @@ class SAFA_TR(nn.Module):
             in_dim_sat = 256
             in_dim_grd = 336
 
-        self.spatial_aware_grd = SA(in_dim=in_dim_grd, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
+        self.GLE_grd = GeoLayoutExtractor(in_dim=in_dim_grd, descriptors=descriptors, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
 
-        self.spatial_aware_sat = SA(in_dim=in_dim_sat, safa_heads=safa_heads, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid, pos=pos)
+        self.GLE_sat = GeoLayoutExtractor(in_dim=in_dim_sat, descriptors=descriptors, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
 
 
     def forward(self, sat, grd, is_cf):
@@ -187,8 +164,8 @@ class SAFA_TR(nn.Module):
 
         sat_x = sat_x.view(b, sat_x.shape[1], -1)
         grd_x = grd_x.view(b, grd_x.shape[1], -1)
-        sat_sa = self.spatial_aware_sat(sat_x)
-        grd_sa = self.spatial_aware_grd(grd_x)
+        sat_sa = self.GLE_sat(sat_x)
+        grd_sa = self.GLE_grd(grd_x)
         sat_sa = F.hardtanh(sat_sa)
         grd_sa = F.hardtanh(grd_sa)
         if is_cf:
@@ -220,7 +197,7 @@ class SAFA_TR(nn.Module):
             return sat_global, grd_global
 
 if __name__ == "__main__":
-    model = SAFA_TR(safa_heads=8, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=2048, pos = 'learn_pos', is_polar=False)
+    model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=2048, is_polar=False)
     sat = torch.randn(1, 3, 256, 256)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(1, 3, 122, 671)

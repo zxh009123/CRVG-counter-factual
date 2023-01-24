@@ -22,9 +22,9 @@ import calendar
 import time
 import json
 
-from models.SAFA_TR import SAFA_TR
+from models.GeoDTR import GeoDTR
 
-from utils.utils import WarmUpGamma, LambdaLR, softMarginTripletLoss,\
+from utils.utils import softMarginTripletLoss,\
      CFLoss, save_model, WarmupCosineSchedule, ReadConfig, validatenp
 
 args_do_not_overide = ['verbose', 'resume_from']
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_suffix", type=str, default='_aug_strong', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch', help='dir to the dataset')
     parser.add_argument('--dataset', default='CVUSA', choices=['CVUSA', 'CVACT'], help='which dataset to use') 
-    parser.add_argument("--SAFA_heads", type=int, default=8, help='number of SAFA heads')
+    parser.add_argument("--descriptors", type=int, default=8, help='number of descriptors')
     parser.add_argument("--TR_heads", type=int, default=8, help='number of heads in Transformer')
     parser.add_argument("--TR_layers", type=int, default=8, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
@@ -54,13 +54,12 @@ if __name__ == "__main__":
     parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
-    parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
     parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
     parser.add_argument('--geo_aug', default='strong', choices=['strong', 'weak', 'none'], help='geometric augmentation strength') 
     parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength') 
 
     opt = parser.parse_args()
-    opt.model = 'SAFA_TR'
+    opt.model = 'GeoDTR'
 
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     logger = logging.getLogger(__name__)
@@ -79,7 +78,7 @@ if __name__ == "__main__":
     batch_size = opt.batch_size
     number_of_epoch = opt.epochs
     learning_rate = opt.lr
-    number_SAFA_heads = opt.SAFA_heads
+    number_descriptors = opt.descriptors
     gamma = opt.gamma
     is_cf = opt.cf
 
@@ -104,18 +103,12 @@ if __name__ == "__main__":
     STREET_IMG_WIDTH = 671
     STREET_IMG_HEIGHT = 122
 
-    if opt.pos == "learn_pos":
-        pos = "learn_pos"
-    else:
-        pos = None
-    print("learnable positional embedding : ", pos)
-
     # generate time stamp
     gmt = time.gmtime()
     ts = calendar.timegm(gmt)
 
     if opt.resume_from == 'None':
-        save_name = f"{ts}_{opt.model}_{opt.dataset}_{is_cf}_{pos}_{polar_transformation}_{opt.save_suffix}"
+        save_name = f"{ts}_{opt.model}_{opt.dataset}_{is_cf}_{polar_transformation}_{opt.save_suffix}"
         print("save_name : ", save_name)
         if not os.path.exists(save_name):
             os.makedirs(save_name)
@@ -151,8 +144,8 @@ if __name__ == "__main__":
         validate_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
-    model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
-    embedding_dims = number_SAFA_heads * 512
+    model = GeoDTR(descriptors=number_descriptors, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
+    embedding_dims = number_descriptors * 512
 
     model = nn.DataParallel(model)
     model.to(device)

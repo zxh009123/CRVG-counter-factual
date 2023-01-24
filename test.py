@@ -17,7 +17,7 @@ import json
 import scipy.io as sio
 from utils.utils import ReadConfig, validatenp
 
-from models.SAFA_TR import SAFA_TR
+from models.GeoDTR import GeoDTR
 
 
 args_do_not_overide = ['data_dir', 'verbose', 'dataset']
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
     parser.add_argument("--data_dir", type=str, default='../scratch/', help='dir to the dataset')
     parser.add_argument('--dataset', default='CVUSA', choices=['CVUSA', 'CVACT'], help='choose between CVUSA or CVACT')
-    parser.add_argument("--SAFA_heads", type=int, default=16, help='number of SAFA heads')
+    parser.add_argument("--descriptors", type=int, default=16, help='number of descriptors')
     parser.add_argument('--verbose', default=False, action='store_true')
     parser.add_argument("--model", type=str, help='model')
     parser.add_argument('--model_path', type=str, help='path to model weights')
@@ -50,7 +50,6 @@ if __name__ == "__main__":
     parser.add_argument("--TR_layers", type=int, default=6, help='number of layers in Transformer')
     parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
-    parser.add_argument("--pos", type=str, default='learn_pos', help='positional embedding')
     parser.add_argument('--validate', default=True, action='store_false', help='perform validate or not')
     parser.add_argument('--save', default='none', choices=['none', 'mat', 'pt'], help='save extracted features into .mat files or pt files')
 
@@ -65,7 +64,7 @@ if __name__ == "__main__":
     print(opt)
 
     batch_size = opt.batch_size
-    number_SAFA_heads = opt.SAFA_heads
+    number_descriptors = opt.descriptors
 
     if opt.no_polar:
         SATELLITE_IMG_WIDTH = 256
@@ -81,12 +80,6 @@ if __name__ == "__main__":
     STREET_IMG_WIDTH = 671
     STREET_IMG_HEIGHT = 122
 
-    if opt.pos == "learn_pos":
-        pos = "learn_pos"
-    else:
-        pos = None
-    print("learnable positional embedding : ", pos)
-
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
@@ -101,8 +94,8 @@ if __name__ == "__main__":
     
     print("number of test samples : ", len(dataset))
 
-    model = SAFA_TR(safa_heads=number_SAFA_heads, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation, pos=pos)
-    embedding_dims = number_SAFA_heads * 512
+    model = GeoDTR(descriptors=number_descriptors, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
+    embedding_dims = number_descriptors * 512
     
     model = nn.DataParallel(model)
     model.to(device)

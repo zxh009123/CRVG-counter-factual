@@ -32,29 +32,6 @@ class WarmupCosineSchedule(LambdaLR):
         progress = float(step - self.warmup_steps) / float(max(1, self.t_total - self.warmup_steps))
         return max(0.0, 0.5 * (1. + math.cos(math.pi * float(self.cycles) * 2.0 * progress)))
 
-class WarmUpGamma():
-    def __init__(self, n_epochs, warm_up_epoch, gamma=0.95):
-        assert ((n_epochs - warm_up_epoch) > 0), "Decay must start before the training session ends!"
-        self.n_epochs = n_epochs
-        self.warm_up_epoch = warm_up_epoch
-        self.gamma = gamma
-
-    def step(self, epoch):
-        if epoch <= self.warm_up_epoch:
-            return float(epoch / self.warm_up_epoch)
-        else:
-            return self.gamma ** (epoch - self.warm_up_epoch)
-
-class LambdaLR():
-    def __init__(self, n_epochs, offset, decay_start_epoch):
-        assert ((n_epochs - decay_start_epoch) > 0), "Decay must start before the training session ends!"
-        self.n_epochs = n_epochs
-        self.offset = offset
-        self.decay_start_epoch = decay_start_epoch
-
-    def step(self, epoch):
-        return 1.0 - max(0.0, epoch + self.offset - self.decay_start_epoch)/(self.n_epochs - self.decay_start_epoch)
-
 
 def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10.0, hard_topk_ratio=1.0):
     dists = 2.0 - 2.0 * torch.matmul(sate_vecs, pano_vecs.permute(1, 0))  # Pairwise matches within batch
@@ -126,42 +103,6 @@ def softMarginTripletLossACT(sate_vecs, pano_vecs, utm, UTMthres=625,loss_weight
     loss = (loss_s2p + loss_p2s) / 2.0
     return loss
 
-def IntraLoss(sate_vecs, pano_vecs, loss_weight=10.0, hard_topk_ratio=1.0):
-    # satllite pairwise
-    dists_sat = 2.0 - 2.0 * torch.matmul(sate_vecs, sate_vecs.permute(1, 0))
-    pos_dists_sat = torch.diag(dists_sat)
-    N = len(pos_dists_sat)
-    diag_ids = np.arange(N)
-    num_hard_triplets = int(hard_topk_ratio * (N * (N - 1))) if hard_topk_ratio < 1.0 else N * (N - 1)
-
-    triplet_dist_sat = pos_dists_sat - dists_sat
-    loss_sat = torch.log(1.0 + torch.exp(loss_weight * triplet_dist_sat))
-    loss_sat[diag_ids, diag_ids] = 0.0  # Ignore diagnal losses
-
-    if hard_topk_ratio < 1.0:  # Hard negative mining
-        loss_sat = loss_sat.view(-1)
-        loss_sat, p2s_ids = torch.topk(loss_sat, num_hard_triplets)
-    loss_sat = loss_sat.sum() / float(num_hard_triplets)
-
-    dists_pano = 2.0 - 2.0 * torch.matmul(pano_vecs, pano_vecs.permute(1, 0))
-    pos_dists_pano = torch.diag(dists_pano)
-    N = len(pos_dists_pano)
-    diag_ids = np.arange(N)
-    num_hard_triplets = int(hard_topk_ratio * (N * (N - 1))) if hard_topk_ratio < 1.0 else N * (N - 1)
-
-    # pano pairwise
-    triplet_dist_pano = pos_dists_pano - dists_pano
-    loss_pano = torch.log(1.0 + torch.exp(loss_weight * triplet_dist_pano))
-    loss_pano[diag_ids, diag_ids] = 0.0  # Ignore diagnal losses
-
-    if hard_topk_ratio < 1.0:  # Hard negative mining
-        loss_pano = loss_pano.view(-1)
-        loss_pano, p2s_ids = torch.topk(loss_pano, num_hard_triplets)
-    loss_pano = loss_pano.sum() / float(num_hard_triplets)
-
-    loss = (loss_pano + loss_sat) / 2.0
-    return loss
-
 def CFLoss(vecs, hat_vecs, loss_weight=5.0):
 
     dists = 2.0 * torch.matmul(vecs, hat_vecs.permute(1, 0)) - 2.0
@@ -194,26 +135,26 @@ def save_model(savePath, model, optimizer, scheduler, epoch, last=True):
             'scheduler_state_dict': scheduler.state_dict()
             }, os.path.join(modelFolder, model_name))
 
+# do not use unstable
+# def ValidateOne(distArray, topK):
+#     acc = 0.0
+#     dataAmount = 0.0
+#     for i in range(distArray.shape[0]):
+#         groundTruths = distArray[i,i]
+#         pred = torch.sum(distArray[:,i] < groundTruths)
+#         if pred < topK:
+#             acc += 1.0
+#         dataAmount += 1.0
+#     return acc / dataAmount
 
-def ValidateOne(distArray, topK):
-    acc = 0.0
-    dataAmount = 0.0
-    for i in range(distArray.shape[0]):
-        groundTruths = distArray[i,i]
-        pred = torch.sum(distArray[:,i] < groundTruths)
-        if pred < topK:
-            acc += 1.0
-        dataAmount += 1.0
-    return acc / dataAmount
-
-def ValidateAll(streetFeatures, satelliteFeatures):
-    distArray = 2.0 - 2.0 * torch.matmul(satelliteFeatures, torch.transpose(streetFeatures, 0, 1))
-    topOnePercent = int(distArray.shape[0] * 0.01) + 1
-    valAcc = torch.zeros((1, topOnePercent), dtype=torch.float)
-    for i in range(topOnePercent):
-        valAcc[0,i] = ValidateOne(distArray, i)
+# def ValidateAll(streetFeatures, satelliteFeatures):
+#     distArray = 2.0 - 2.0 * torch.matmul(satelliteFeatures, torch.transpose(streetFeatures, 0, 1))
+#     topOnePercent = int(distArray.shape[0] * 0.01) + 1
+#     valAcc = torch.zeros((1, topOnePercent), dtype=torch.float)
+#     for i in range(topOnePercent):
+#         valAcc[0,i] = ValidateOne(distArray, i)
     
-    return valAcc
+#     return valAcc
 
 def validatenp(sat_global_descriptor, grd_global_descriptor):
     dist_array = 2.0 - 2.0 * np.matmul(sat_global_descriptor, grd_global_descriptor.T)
