@@ -57,7 +57,7 @@ class ImageDataset(Dataset):
 
 
 class USADataset(Dataset):
-    def __init__(self, data_dir="../scratch/CVUSA/dataset/", geometric_aug='strong', sematic_aug='strong', mode='train', is_polar=True):
+    def __init__(self, data_dir="../scratch/CVUSA/dataset/", geometric_aug='strong', sematic_aug='strong', mode='train', is_polar=True, is_mutual=True):
         self.data_dir = data_dir
 
         STREET_IMG_WIDTH = 671
@@ -65,6 +65,7 @@ class USADataset(Dataset):
 
         self.is_polar = is_polar
         self.mode = mode
+        self.is_mutual = is_mutual
 
         if not is_polar:
             SATELLITE_IMG_WIDTH = 256
@@ -177,9 +178,39 @@ class USADataset(Dataset):
         else:
             raise RuntimeError(f"geometric augmentation {self.geometric_aug} is not implemented")
 
+        if self.is_mutual == False:
+            return {'satellite':satellite, 'ground':ground}
 
-        return {'satellite':satellite, 'ground':ground}
+        else:
+            mutual_satellite = satellite.clone().detach()
+            mutual_ground = ground.clone().detach()
 
+            # generate new different layout
+            hflip = random.randint(0,1)
+            orientation = random.choice(["left", "right", "back", "none"])
+
+            while hflip == 0 and orientation == "none":
+                hflip = random.randint(0,1)
+                orientation = random.choice(["left", "right", "back", "none"])
+
+            if hflip == 1:
+                mutual_satellite, mutual_ground = HFlip(mutual_satellite, mutual_ground)
+            else:
+                pass
+
+            if orientation == "none":
+                pass
+            else:
+                mutual_satellite, mutual_ground = Rotate(mutual_satellite, mutual_ground, orientation, self.is_polar)
+
+            perturb = [hflip, orientation]
+
+            return {'satellite':satellite, 
+                    'ground':ground,
+                    'mutual_satellite':mutual_satellite,
+                    'mutual_ground':mutual_ground,
+                    'perturb':perturb}
+            
 
     def __len__(self):
         return len(self.data_list)
@@ -193,14 +224,14 @@ if __name__ == "__main__":
     SATELLITE_IMG_WIDTH = 671
     SATELLITE_IMG_HEIGHT = 122
 
-    transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
-                    transforms.ToTensor()
-                    ]
-    transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
-                    transforms.ToTensor()
-                    ]
+    # transforms_sate = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH)),
+    #                 transforms.ToTensor()
+    #                 ]
+    # transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH)),
+    #                 transforms.ToTensor()
+    #                 ]
 
-    dataloader = DataLoader(USADataset(data_dir='../scratch/CVUSA/dataset/',geometric_aug='strong', sematic_aug='strong', mode='train', is_polar=True),\
+    dataloader = DataLoader(USADataset(data_dir='../scratch/CVUSA/dataset/',geometric_aug='strong', sematic_aug='strong', mode='train', is_polar=False),\
          batch_size=4, shuffle=True, num_workers=8)
     
     # print(len(dataloader))
@@ -212,19 +243,28 @@ if __name__ == "__main__":
         print("===========================")
         print(b["ground"].shape)
         print(b["satellite"].shape)
+        print(b["mutual_ground"].shape)
+        print(b["mutual_satellite"].shape)
+        print(b["perturb"])
         print("===========================")
-        time.sleep(2)
 
         grd = b["ground"][0]
         sat = b["satellite"][0]
+        mu_grd = b["mutual_ground"][0]
+        mu_sat = b["mutual_satellite"][0]
 
         sat = sat * 0.5 + 0.5
         grd = grd * 0.5 + 0.5
+        mu_sat = mu_sat * 0.5 + 0.5
+        mu_grd = mu_grd * 0.5 + 0.5
 
         torchvision.utils.save_image(sat, "sat_flip.png")
         torchvision.utils.save_image(grd, "grd_flip.png")
+        torchvision.utils.save_image(mu_sat, "mu_sat_flip.png")
+        torchvision.utils.save_image(mu_grd, "mu_grd_flip.png")
 
-        if i == 2:
-            break
+        # if i == 2:
+        #     break
+        time.sleep(2)
 
     print(total_time / i)

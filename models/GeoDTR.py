@@ -168,8 +168,11 @@ class GeoDTR(nn.Module):
         grd_sa = self.GLE_grd(grd_x)
         sat_sa = F.hardtanh(sat_sa)
         grd_sa = F.hardtanh(grd_sa)
-        if is_cf:
 
+        # print("sat_sa shape : ", sat_x.shape)
+        # print("grd_sa shape : ", grd_x.shape)
+
+        if is_cf:
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1.0, 1.0)
             fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1.0, 1.0)
 
@@ -187,6 +190,7 @@ class GeoDTR(nn.Module):
             fake_grd_global = F.normalize(fake_grd_global, p=2, dim=1)
 
             return sat_global, grd_global, fake_sat_global, fake_grd_global
+
         else:
             sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
             grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
@@ -197,22 +201,19 @@ class GeoDTR(nn.Module):
             return sat_global, grd_global
 
 if __name__ == "__main__":
-    model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=2048, is_polar=False)
-    sat = torch.randn(1, 3, 256, 256)
+    model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=2048, is_polar=True)
+    sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
-    grd = torch.randn(1, 3, 122, 671)
-    result = model(sat, grd, False)
-
-    params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(params/1000000.0)
+    grd = torch.randn(7, 3, 122, 671)
+    result = model(sat, grd, True)
 
     for i in result:
         print(i.shape)
 
-    macs, params = profile(model, inputs=(sat, grd, False, ))
-    macs, params = clever_format([macs, params], "%.3f")
+    # macs, params = profile(model, inputs=(sat, grd, False, ))
+    # macs, params = clever_format([macs, params], "%.3f")
 
-    print(macs)
-    print(params)
+    # print(macs)
+    # print(params)
 
 

@@ -2,6 +2,7 @@ import os
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
+import torchvision
 from PIL import Image
 import scipy.io as sio
 from .trans_utils import RandomPosterize
@@ -9,6 +10,7 @@ import torchvision.transforms as transforms
 from .augmentations import HFlip, Rotate
 import random
 import numpy as np
+import time
 # __all__ = ['TrainDataloader','TestDataloader']
 
 if os.path.exists('/mnt/CVACT/ACT_data.mat'):
@@ -107,7 +109,7 @@ else:
 
 
 class ACTDataset(Dataset):
-    def __init__(self, data_dir, geometric_aug='strong', sematic_aug='strong', is_polar=True, mode='train'):
+    def __init__(self, data_dir, geometric_aug='strong', sematic_aug='strong', is_polar=True, mode='train', is_mutual=True):
         self.mode = mode
         if mode == 'train':
             folder_name = 'ANU_data_small'
@@ -118,6 +120,7 @@ class ACTDataset(Dataset):
         self.img_root = data_dir
 
         self.is_polar = is_polar
+        self.is_mutual = is_mutual
 
         STREET_IMG_WIDTH = 671
         STREET_IMG_HEIGHT = 122
@@ -261,8 +264,40 @@ class ACTDataset(Dataset):
         else:
             raise RuntimeError(f"geometric augmentation {self.geometric_aug} is not implemented")
 
-        # return x, y
-        return {'satellite':satellite, 'ground':ground, 'utm':utm}
+
+        if self.is_mutual == False:
+            return {'satellite':satellite, 'ground':ground, 'utm':utm}
+            
+        else:
+            mutual_satellite = satellite.clone().detach()
+            mutual_ground = ground.clone().detach()
+
+            # generate new different layout
+            hflip = random.randint(0,1)
+            orientation = random.choice(["left", "right", "back", "none"])
+
+            while hflip == 0 and orientation == "none":
+                hflip = random.randint(0,1)
+                orientation = random.choice(["left", "right", "back", "none"])
+
+            if hflip == 1:
+                mutual_satellite, mutual_ground = HFlip(mutual_satellite, mutual_ground)
+            else:
+                pass
+
+            if orientation == "none":
+                pass
+            else:
+                mutual_satellite, mutual_ground = Rotate(mutual_satellite, mutual_ground, orientation, self.is_polar)
+
+            perturb = [hflip, orientation]
+
+            return {'satellite':satellite, 
+                    'ground':ground,
+                    'mutual_satellite':mutual_satellite,
+                    'mutual_ground':mutual_ground,
+                    'perturb':perturb,
+                    'utm':utm}
 
 
     def __len__(self):
@@ -281,16 +316,40 @@ if __name__ == "__main__":
                         transforms.ToTensor(),
                         transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5))
                         ]
-    dataloader = DataLoader(ACTDataset(data_dir='../scratch/CVACT/', geometric_aug='none', sematic_aug='none', is_polar=True, mode='train'),batch_size=4, shuffle=False, num_workers=8)
+    dataloader = DataLoader(ACTDataset(data_dir='../scratch/CVACT/', geometric_aug='strong', sematic_aug='strong', is_polar=True, mode='train'),batch_size=4, shuffle=False, num_workers=8)
 
-    i = 0
-    for k in dataloader:
-        i += 1
-        print("---batch---")
-        print("satellite : ", k['satellite'][0,:,1,1])
-        print("grd : ", k['ground'][0,:,1,1])
-        print("utm : ", k['utm'])
-        print("-----------")
-        if i > 2:
-            break
+    # print(len(dataloader))
+    total_time = 0
+    start = time.time()
+    for i,b in enumerate(dataloader):
+        end = time.time()
+        elapse = end - start
+        print("===========================")
+        print(b["ground"].shape)
+        print(b["satellite"].shape)
+        print(b["mutual_ground"].shape)
+        print(b["mutual_satellite"].shape)
+        print(b["perturb"])
+        print("===========================")
+
+        grd = b["ground"][0]
+        sat = b["satellite"][0]
+        mu_grd = b["mutual_ground"][0]
+        mu_sat = b["mutual_satellite"][0]
+
+        sat = sat * 0.5 + 0.5
+        grd = grd * 0.5 + 0.5
+        mu_sat = mu_sat * 0.5 + 0.5
+        mu_grd = mu_grd * 0.5 + 0.5
+
+        torchvision.utils.save_image(sat, "sat_flip.png")
+        torchvision.utils.save_image(grd, "grd_flip.png")
+        torchvision.utils.save_image(mu_sat, "mu_sat_flip.png")
+        torchvision.utils.save_image(mu_grd, "mu_grd_flip.png")
+
+        # if i == 2:
+        #     break
+        time.sleep(2)
+
+    print(total_time / i)
     
