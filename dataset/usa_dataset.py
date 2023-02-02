@@ -149,13 +149,23 @@ class USADataset(Dataset):
         satellite = Image.open(os.path.join(self.data_dir, satellite_file))
         ground = Image.open(os.path.join(self.data_dir, ground_file))
 
-        satellite = self.transforms_sat(satellite)
-        ground = self.transforms_street(ground)
+        satellite_first = self.transforms_sat(satellite)
+        ground_first = self.transforms_street(ground)
+
+        satellite_second = self.transforms_sat(satellite)
+        ground_second = self.transforms_street(ground)
+
+        # print(satellite_first.shape)
+        # print(ground_first.shape)
+        # print(satellite_second.shape)
+        # print(ground_second.shape)
+        # print("-----------------")
 
         if self.geometric_aug == "strong":
             hflip = random.randint(0,1)
             if hflip == 1:
-                satellite, ground = HFlip(satellite, ground)
+                satellite_first, ground_first = HFlip(satellite_first, ground_first)
+                satellite_second, ground_second = HFlip(satellite_second, ground_second)
             else:
                 pass
 
@@ -163,12 +173,14 @@ class USADataset(Dataset):
             if orientation == "none":
                 pass
             else:
-                satellite, ground = Rotate(satellite, ground, orientation, self.is_polar)
+                satellite_first, ground_first = Rotate(satellite_first, ground_first, orientation, self.is_polar)
+                satellite_second, ground_second = Rotate(satellite_second, ground_second, orientation, self.is_polar)
 
         elif self.geometric_aug == "weak":
             hflip = random.randint(0,1)
             if hflip == 1:
-                satellite, ground = HFlip(satellite, ground)
+                satellite_first, ground_first = HFlip(satellite_first, ground_first)
+                satellite_second, ground_second = HFlip(satellite_second, ground_second)
             else:
                 pass
 
@@ -179,11 +191,11 @@ class USADataset(Dataset):
             raise RuntimeError(f"geometric augmentation {self.geometric_aug} is not implemented")
 
         if self.is_mutual == False:
-            return {'satellite':satellite, 'ground':ground}
+            return {'satellite':satellite_first, 'ground':ground_first}
 
         else:
-            mutual_satellite = satellite.clone().detach()
-            mutual_ground = ground.clone().detach()
+            # mutual_satellite = satellite.clone().detach()
+            # mutual_ground = ground.clone().detach()
 
             # generate new different layout
             hflip = random.randint(0,1)
@@ -194,21 +206,21 @@ class USADataset(Dataset):
                 orientation = random.choice(["left", "right", "back", "none"])
 
             if hflip == 1:
-                mutual_satellite, mutual_ground = HFlip(mutual_satellite, mutual_ground)
+                satellite_second, ground_second = HFlip(satellite_second, ground_second)
             else:
                 pass
 
             if orientation == "none":
                 pass
             else:
-                mutual_satellite, mutual_ground = Rotate(mutual_satellite, mutual_ground, orientation, self.is_polar)
+                satellite_second, ground_second = Rotate(satellite_second, ground_second, orientation, self.is_polar)
 
             perturb = [hflip, orientation]
 
-            return {'satellite':satellite, 
-                    'ground':ground,
-                    'mutual_satellite':mutual_satellite,
-                    'mutual_ground':mutual_ground,
+            return {'satellite_first':satellite_first, 
+                    'ground_first':ground_first,
+                    'satellite_second':satellite_second,
+                    'ground_second':ground_second,
                     'perturb':perturb}
             
 
@@ -231,7 +243,7 @@ if __name__ == "__main__":
     #                 transforms.ToTensor()
     #                 ]
 
-    dataloader = DataLoader(USADataset(data_dir='../scratch/CVUSA/dataset/',geometric_aug='strong', sematic_aug='strong', mode='train', is_polar=False),\
+    dataloader = DataLoader(USADataset(data_dir='../scratch/CVUSA/dataset/',geometric_aug='strong', sematic_aug='strong', mode='train', is_polar=True),\
          batch_size=4, shuffle=True, num_workers=8)
     
     # print(len(dataloader))
@@ -241,27 +253,27 @@ if __name__ == "__main__":
         end = time.time()
         elapse = end - start
         print("===========================")
-        print(b["ground"].shape)
-        print(b["satellite"].shape)
-        print(b["mutual_ground"].shape)
-        print(b["mutual_satellite"].shape)
+        print(b["ground_first"].shape)
+        print(b["satellite_first"].shape)
+        print(b["ground_second"].shape)
+        print(b["satellite_second"].shape)
         print(b["perturb"])
         print("===========================")
 
-        grd = b["ground"][0]
-        sat = b["satellite"][0]
-        mu_grd = b["mutual_ground"][0]
-        mu_sat = b["mutual_satellite"][0]
+        grd = b["ground_first"][0]
+        sat = b["satellite_first"][0]
+        mu_grd = b["ground_second"][0]
+        mu_sat = b["satellite_second"][0]
 
         sat = sat * 0.5 + 0.5
         grd = grd * 0.5 + 0.5
         mu_sat = mu_sat * 0.5 + 0.5
         mu_grd = mu_grd * 0.5 + 0.5
 
-        torchvision.utils.save_image(sat, "sat_flip.png")
-        torchvision.utils.save_image(grd, "grd_flip.png")
-        torchvision.utils.save_image(mu_sat, "mu_sat_flip.png")
-        torchvision.utils.save_image(mu_grd, "mu_grd_flip.png")
+        torchvision.utils.save_image(sat, "sat_f.png")
+        torchvision.utils.save_image(grd, "grd_f.png")
+        torchvision.utils.save_image(mu_sat, "sat_s.png")
+        torchvision.utils.save_image(mu_grd, "grd_s.png")
 
         # if i == 2:
         #     break

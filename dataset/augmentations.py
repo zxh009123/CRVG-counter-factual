@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 import math
+import random
 
 def HFlip(sat, grd):
     sat = torch.flip(sat, [2])
@@ -49,27 +50,48 @@ def Rotate(sat, grd, orientation, is_polar):
 
     return sat_rotate, grd_rotate
 
-def Reverse_Rotate_Flip(sat, ground, perturb, polar):
+def Reverse_Rotate_Flip(sat, grd, perturb, polar):
     # Reverse process
-    reverse_perturb = [None, None]
-    reverse_perturb[0] = perturb[0]
 
-    if perturb[1] == "left":
-        reverse_perturb[1] = "right"
-    elif perturb[1] == "right":
-        reverse_perturb[1] = "left"
-    else:
-        reverse_perturb[1] = perturb[1]
+    assert sat.shape[0] == grd.shape[0]
+    assert sat.shape[0] == len(perturb)
 
-    # print(reverse_perturb)
+    sat = sat.permute(0,3,1,2)
+    grd = grd.permute(0,3,1,2)
 
-    # reverse process first rotate then flip
-    re_sat, re_grd = Rotate(sat, ground, reverse_perturb[1], polar)
+    reversed_sat_desc = torch.zeros_like(sat)
+    reversed_grd_desc = torch.zeros_like(grd)
 
-    if reverse_perturb[0] == 1:
-        re_sat, re_grd = HFlip(re_sat, re_grd)
+    for i in range(len(perturb)):
+        reverse_perturb = [None, None]
+        reverse_perturb[0] = perturb[i][0]
 
-    return re_sat, re_grd
+        if perturb[i][1] == "left":
+            reverse_perturb[1] = "right"
+        elif perturb[i][1] == "right":
+            reverse_perturb[1] = "left"
+        else:
+            reverse_perturb[1] = perturb[i][1]
+
+        # print(reverse_perturb)
+
+        # reverse process first rotate then flip
+        if reverse_perturb[1] == "none":
+            re_sat = sat[i]
+            re_grd = grd[i]
+        else:
+            re_sat, re_grd = Rotate(sat[i], grd[i], reverse_perturb[1], polar)
+
+        if reverse_perturb[0] == 1:
+            re_sat, re_grd = HFlip(re_sat, re_grd)
+
+        reversed_sat_desc[i] = re_sat
+        reversed_grd_desc[i] = re_grd
+
+    reversed_sat_desc = reversed_sat_desc.permute(0,2,3,1)
+    reversed_grd_desc = reversed_grd_desc.permute(0,2,3,1)
+
+    return reversed_sat_desc, reversed_grd_desc
 
 
 def Free_Rotation(sat, grd, degree, axis="h"):
@@ -150,51 +172,72 @@ def Free_Flip(sat, grd, degree):
 
 
 if __name__ == "__main__":
+    # original descriptors
     sat = torch.rand(32, 16, 16, 8)
+    # sat = torch.rand(2, 4, 4, 3)
     # sat = torch.rand(32, 8, 42, 8)
     polar = False
     grd = torch.rand(32, 8, 42, 8)
+    # grd = torch.rand(2, 2, 6, 3)
 
 
-    # mu_sat = sat.clone().detach()
+    # Copy to generate a new descriptor
     mu_sat = sat.clone().detach()
     mu_grd = grd.clone().detach()
     
 
-    perturb = [0, "left"]
-    if perturb[0] == 1:
-        mu_sat, mu_grd = HFlip(mu_sat, mu_grd)
-    mu_sat, mu_grd = Rotate(mu_sat, mu_grd, perturb[1], polar)
+    # generate new descriptor by LS
+    mu_sat = mu_sat.permute(0,3,1,2)
+    mu_grd = mu_grd.permute(0,3,1,2)
+
+    first_sat = torch.zeros_like(mu_sat)
+    first_grd = torch.zeros_like(mu_grd)
+
+    # generate # of batch size LS operations
+    # perturb = [[1, "none"], [1, "left"], [1, "back"], [0, "right"], [0, "left"], [0, "back"]]
+    perturb = []
+    for i in range(32):
+        hflip = random.randint(0,1)
+        orientation = random.choice(["left", "right", "back", "none"])
+
+        while hflip == 0 and orientation == "none":
+            hflip = random.randint(0,1)
+            orientation = random.choice(["left", "right", "back", "none"])
+
+        perturb.append([hflip, orientation])
+
+    # print(perturb)
+
+    # perform LS to generate new layout
+    for i in range(len(perturb)):
+        orig_sat = mu_sat[i]
+        orig_grd = mu_grd[i]
+        if perturb[i][0] == 1:
+            orig_sat, orig_grd = HFlip(orig_sat, orig_grd)
+        if perturb[i][1] != "none": 
+            first_sat[i], first_grd[i] = Rotate(orig_sat, orig_grd, perturb[i][1], polar)
+        else:
+            first_sat[i] = orig_sat
+            first_grd[i] = orig_grd
+
+    first_sat = first_sat.permute(0,2,3,1)
+    first_grd = first_grd.permute(0,2,3,1)
 
     print("=====before:")
-    print(grd[0, 0, 0:8, 0])
-    print(mu_grd[0, 0, 0:8, 0])
-    print(torch.equal(sat, mu_sat))
-    print(torch.equal(grd, mu_grd))
+    # print(grd[0, :, :, :])
+    # print(first_grd[0, :, :, :])
+    # print(sat[0, :, :, :])
+    # print(first_sat[0, :, :, :])
+    print(torch.equal(sat, first_sat))
+    print(torch.equal(grd, first_grd))
 
-    re_sat, re_grd = Reverse_Rotate_Flip(mu_sat, mu_grd, perturb, polar)
-
-    # # Reverse process
-    # reverse_perturb = [None, None]
-    # reverse_perturb[0] = perturb[0]
-
-    # if perturb[1] == "left":
-    #     reverse_perturb[1] = "right"
-    # elif perturb[1] == "right":
-    #     reverse_perturb[1] = "left"
-    # else:
-    #     reverse_perturb[1] = perturb[1]
-
-    # # print(reverse_perturb)
-
-    # # reverse process first rotate then flip
-    # mu_sat, mu_grd = Rotate(mu_sat, mu_grd, reverse_perturb[1], polar)
-
-    # if reverse_perturb[0] == 1:
-    #     mu_sat, mu_grd = HFlip(mu_sat, mu_grd)
+    # Reverse to original layout
+    second_sat, second_grd = Reverse_Rotate_Flip(first_sat, first_grd, perturb, polar)
 
     print("=====after:")
-    print(grd[0, 0, 0:8, 0])
-    print(re_grd[0, 0, 0:8, 0])
-    print(torch.equal(sat, re_sat))
-    print(torch.equal(grd, re_grd))
+    # print(grd[0, :, :, :])
+    # print(second_grd[0, :, :, :])
+    # print(sat[0, :, :, :])
+    # print(second_sat[0, :, :, :])
+    print(torch.equal(sat, second_sat))
+    print(torch.equal(grd, second_grd))
