@@ -11,9 +11,8 @@ from dataset.usa_dataset import USADataset
 #     from dataset.act_dataset_cluster import ACTDataset
 # else:
 from dataset.act_dataset import ACTDataset
+from dataset.augmentations import Reverse_Rotate_Flip
 from torch.utils.tensorboard import SummaryWriter
-
-
 from tqdm import tqdm
 import numpy as np
 import argparse
@@ -56,7 +55,9 @@ if __name__ == "__main__":
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
     parser.add_argument('--geo_aug', default='strong', choices=['strong', 'weak', 'none'], help='geometric augmentation strength') 
-    parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength') 
+    parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength')
+    parser.add_argument('--mutual', default=False, action='store_true', help='no mutual learning')
+
 
     opt = parser.parse_args()
     opt.model = 'GeoDTR'
@@ -128,20 +129,39 @@ if __name__ == "__main__":
 
     if opt.dataset == "CVUSA":
 
-        dataloader = DataLoader(USADataset(data_dir = opt.data_dir, geometric_aug=opt.geo_aug, sematic_aug=opt.sem_aug, mode='train', is_polar=polar_transformation),\
-            batch_size=batch_size, shuffle=True, num_workers=8)
+        dataloader = DataLoader(USADataset(data_dir = opt.data_dir, \
+                                geometric_aug=opt.geo_aug, \
+                                sematic_aug=opt.sem_aug, mode='train', \
+                                is_polar=polar_transformation, \
+                                is_mutual=opt.mutual),\
+                                batch_size=batch_size, shuffle=True, num_workers=8)
 
-        validateloader = DataLoader(USADataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', mode='val', is_polar=polar_transformation),\
+        validateloader = DataLoader(USADataset(data_dir = opt.data_dir, \
+                                    geometric_aug='none', \
+                                    sematic_aug='none', \
+                                    mode='val', \
+                                    is_polar=polar_transformation, \
+                                    is_mutual=False),\
             batch_size=batch_size, shuffle=False, num_workers=8)
 
 
     elif opt.dataset == "CVACT":
         #train
-        train_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug=opt.geo_aug, sematic_aug=opt.sem_aug, is_polar=polar_transformation, mode='train')
+        train_dataset = ACTDataset(data_dir = opt.data_dir, \
+                        geometric_aug=opt.geo_aug, \
+                        sematic_aug=opt.sem_aug, \
+                        is_polar=polar_transformation, \
+                        mode='train', \
+                        is_mutual=opt.mutual)
         dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
 
         #val
-        validate_dataset = ACTDataset(data_dir = opt.data_dir, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val')
+        validate_dataset = ACTDataset(data_dir = opt.data_dir, \
+                            geometric_aug='none', \
+                            sematic_aug='none', \
+                            is_polar=polar_transformation, \
+                            mode='val', \
+                            is_mutual=False)
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
     model = GeoDTR(descriptors=number_descriptors, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
@@ -181,14 +201,36 @@ if __name__ == "__main__":
 
             optimizer.zero_grad()
 
-            sat = batch['satellite'].to(device)
-            grd = batch['ground'].to(device)
+            if opt.mutual:
+                sat_first = batch['satellite_first']
+                grd_first = batch['ground_first']
+                sat_second = batch['satellite_second']
+                grd_second = batch['ground_second']
+                batch_perturb = batch["perturb"]
 
+                # print(sat_first.shape)
+                # print(grd_first.shape)
+                # print(sat_second.shape)
+                # print(grd_second.shape)
+
+                sat_all = torch.cat((sat_first, sat_second), 0)
+                grd_all = torch.cat((grd_first, grd_second), 0)
+
+                # print(sat_all.shape)
+                # print(grd_all.shape)
+                # print(perturb[0])
+                # print(perturb[1])
+                # print([int(perturb[0][0]), perturb[1][0]])
+                # print([int(perturb[0][1]), perturb[1][1]])
+                # print([int(perturb[0][2]), perturb[1][2]])
+            else:
+                sat_all = batch["satellite"]
+                grd_all = batch["ground"]
 
             if is_cf:
-                sat_global, grd_global, fake_sat_global, fake_grd_global = model(sat, grd, is_cf)
+                sat_global, grd_global, fake_sat_global, fake_grd_global, sat_desc, grd_desc = model(sat_all, grd_all, is_cf)
             else:
-                sat_global, grd_global = model(sat, grd, is_cf)
+                sat_global, grd_global, sat_desc, grd_desc = model(sat_all, grd_all, is_cf)
 
             triplet_loss = softMarginTripletLoss(sate_vecs=sat_global, pano_vecs=grd_global, loss_weight=gamma)
 
@@ -203,12 +245,34 @@ if __name__ == "__main__":
                 loss += CFLoss_total
                 epoch_cf_loss += CFLoss_total.item()
 
+            # mutual loss
+            if opt.mutual:
+                grd_desc = grd_desc.reshape((grd_desc.shape[0], 8, 42, opt.descriptors))
+                if opt.no_polar:
+                    sat_desc = sat_desc.reshape((sat_desc.shape[0], 16, 16, opt.descriptors))
+                else:
+                    sat_desc = sat_desc.reshape((sat_desc.shape[0], 8, 42, opt.descriptors))
+
+                # split into first and second half
+                grd_desc_first, grd_desc_second = torch.tensor_split(grd_desc, 2)
+                sat_desc_first, sat_desc_second = torch.tensor_split(sat_desc, 2)
+
+                #reverse second half
+                perturb = [[int(batch_perturb[0][i]), batch_perturb[1][i]] for i in range(len(batch_perturb[1]))]
+                second_sat, second_grd = Reverse_Rotate_Flip(sat_desc_second, grd_desc_second, perturb, not opt.no_polar)
+
+                print(second_sat.shape)
+                print(second_grd.shape)
+
             loss.backward()
 
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
             optimizer.step()
+
+            print("epoch end....")
+            exit(0)
         # adjust lr
         lrSchedule.step()
 
@@ -237,7 +301,7 @@ if __name__ == "__main__":
                 sat = batch['satellite'].to(device)
                 grd = batch['ground'].to(device)
 
-                sat_global, grd_global = model(sat, grd, is_cf=False)
+                sat_global, grd_global, _ , _ = model(sat, grd, is_cf=False)
 
                 sat_global_descriptor[val_i: val_i + sat_global.shape[0], :] = sat_global.detach().cpu().numpy()
                 grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global.detach().cpu().numpy()

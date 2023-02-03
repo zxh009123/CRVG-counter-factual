@@ -59,8 +59,8 @@ def Reverse_Rotate_Flip(sat, grd, perturb, polar):
     sat = sat.permute(0,3,1,2)
     grd = grd.permute(0,3,1,2)
 
-    reversed_sat_desc = torch.zeros_like(sat)
-    reversed_grd_desc = torch.zeros_like(grd)
+    # reversed_sat_desc = torch.zeros_like(sat)
+    # reversed_grd_desc = torch.zeros_like(grd)
 
     for i in range(len(perturb)):
         reverse_perturb = [None, None]
@@ -76,22 +76,16 @@ def Reverse_Rotate_Flip(sat, grd, perturb, polar):
         # print(reverse_perturb)
 
         # reverse process first rotate then flip
-        if reverse_perturb[1] == "none":
-            re_sat = sat[i]
-            re_grd = grd[i]
-        else:
-            re_sat, re_grd = Rotate(sat[i], grd[i], reverse_perturb[1], polar)
+        if reverse_perturb[1] != "none":
+            sat[i], grd[i] = Rotate(sat[i], grd[i], reverse_perturb[1], polar)
 
         if reverse_perturb[0] == 1:
-            re_sat, re_grd = HFlip(re_sat, re_grd)
+            sat[i], grd[i] = HFlip(sat[i], grd[i])
 
-        reversed_sat_desc[i] = re_sat
-        reversed_grd_desc[i] = re_grd
+    sat = sat.permute(0,2,3,1)
+    grd = grd.permute(0,2,3,1)
 
-    reversed_sat_desc = reversed_sat_desc.permute(0,2,3,1)
-    reversed_grd_desc = reversed_grd_desc.permute(0,2,3,1)
-
-    return reversed_sat_desc, reversed_grd_desc
+    return sat, grd
 
 
 def Free_Rotation(sat, grd, degree, axis="h"):
@@ -206,7 +200,7 @@ if __name__ == "__main__":
 
         perturb.append([hflip, orientation])
 
-    # print(perturb)
+    print(perturb)
 
     # perform LS to generate new layout
     for i in range(len(perturb)):

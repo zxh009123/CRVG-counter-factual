@@ -132,7 +132,7 @@ if __name__ == "__main__":
             # grd = batch['street'][:,batch['street'].shape[1] // 2]
 
             starter.record()
-            sat_global, grd_global = model(sat, grd, is_cf=False)
+            sat_global, grd_global, _ , _ = model(sat, grd, is_cf=False)
             ender.record()
 
             torch.cuda.synchronize()

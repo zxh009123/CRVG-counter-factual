@@ -189,7 +189,7 @@ class GeoDTR(nn.Module):
             fake_sat_global = F.normalize(fake_sat_global, p=2, dim=1)
             fake_grd_global = F.normalize(fake_grd_global, p=2, dim=1)
 
-            return sat_global, grd_global, fake_sat_global, fake_grd_global
+            return sat_global, grd_global, fake_sat_global, fake_grd_global, sat_sa, grd_sa
 
         else:
             sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
@@ -198,7 +198,7 @@ class GeoDTR(nn.Module):
             sat_global = F.normalize(sat_global, p=2, dim=1)
             grd_global = F.normalize(grd_global, p=2, dim=1)
 
-            return sat_global, grd_global
+            return sat_global, grd_global, sat_sa, grd_sa
 
 if __name__ == "__main__":
     model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=2048, is_polar=True)

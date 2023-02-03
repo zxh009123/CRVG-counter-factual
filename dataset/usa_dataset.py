@@ -161,6 +161,8 @@ class USADataset(Dataset):
         # print(ground_second.shape)
         # print("-----------------")
 
+
+        # Generate first view
         if self.geometric_aug == "strong":
             hflip = random.randint(0,1)
             if hflip == 1:
@@ -197,7 +199,7 @@ class USADataset(Dataset):
             # mutual_satellite = satellite.clone().detach()
             # mutual_ground = ground.clone().detach()
 
-            # generate new different layout
+            # generate new different layout (second view)
             hflip = random.randint(0,1)
             orientation = random.choice(["left", "right", "back", "none"])
 
