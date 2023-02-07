@@ -50,6 +50,56 @@ def Rotate(sat, grd, orientation, is_polar):
 
     return sat_rotate, grd_rotate
 
+def Rotate_tensor(sat, grd, orientation, is_polar):
+    height, width = grd.shape[1], grd.shape[2]
+    if orientation == 'left':
+        split_width = int(math.ceil(width * 0.75))
+        if is_polar:
+            # left_sat = sat[:, :, 0:int(math.ceil(width * 0.75))]
+            # right_sat = sat[:, :, int(math.ceil(width * 0.75)):]
+            left_sat, right_sat = torch.split(sat, [split_width, width - split_width], dim=2)
+            sat_rotate = torch.cat([right_sat, left_sat], dim=2)
+        else:
+            sat_rotate = torch.rot90(sat, -1, [1, 2])
+        # left_grd = grd[:, :, 0:int(math.ceil(width * 0.75))]
+        # right_grd = grd[:, :, int(math.ceil(width * 0.75)):]
+        left_grd, right_grd = torch.split(grd, [split_width, width - split_width], dim=2)
+        grd_rotate = torch.cat([right_grd, left_grd], dim=2)
+
+    elif orientation == 'right':
+        split_width = int(math.floor(width * 0.25))
+        if is_polar:
+            # left_sat = sat[:, :, 0:int(math.floor(width * 0.25))]
+            # right_sat = sat[:, :, int(math.floor(width * 0.25)):]
+            left_sat, right_sat = torch.split(sat, [split_width, width - split_width], dim=2)
+            sat_rotate = torch.cat([right_sat, left_sat], dim=2)
+        else:
+            sat_rotate = torch.rot90(sat, 1, [1,2])
+        # left_grd = grd[:, :, 0:int(math.floor(width * 0.25))]
+        # right_grd = grd[:, :, int(math.floor(width * 0.25)):]
+        left_grd, right_grd = torch.split(grd, [split_width, width - split_width], dim=2)
+        grd_rotate = torch.cat([right_grd, left_grd], dim=2)
+
+    elif orientation == 'back':
+        split_width = int(width * 0.5)
+        if is_polar:
+            # left_sat = sat[:, :, 0:int(width * 0.5)]
+            # right_sat = sat[:, :, int(width * 0.5):]
+            left_sat, right_sat = torch.split(sat, [split_width, width - split_width], dim=2)
+            sat_rotate = torch.cat([right_sat, left_sat], dim=2)
+        else:
+            sat_rotate = torch.rot90(sat, 1, [1,2])
+            sat_rotate = torch.rot90(sat_rotate, 1, [1,2])
+        # left_grd = grd[:, :, 0:int(width * 0.5)]
+        # right_grd = grd[:, :, int(width * 0.5):]
+        left_grd, right_grd = torch.split(grd, [split_width, width - split_width], dim=2)
+        grd_rotate = torch.cat([right_grd, left_grd], dim=2)
+    
+    else:
+        raise RuntimeError(f"Orientation {orientation} is not implemented")
+
+    return sat_rotate, grd_rotate
+
 def Reverse_Rotate_Flip(sat, grd, perturb, polar):
     # Reverse process
 
@@ -59,8 +109,8 @@ def Reverse_Rotate_Flip(sat, grd, perturb, polar):
     sat = sat.permute(0,3,1,2)
     grd = grd.permute(0,3,1,2)
 
-    # reversed_sat_desc = torch.zeros_like(sat)
-    # reversed_grd_desc = torch.zeros_like(grd)
+    reversed_sat_desc = torch.zeros_like(sat)
+    reversed_grd_desc = torch.zeros_like(grd)
 
     for i in range(len(perturb)):
         reverse_perturb = [None, None]
@@ -77,15 +127,21 @@ def Reverse_Rotate_Flip(sat, grd, perturb, polar):
 
         # reverse process first rotate then flip
         if reverse_perturb[1] != "none":
-            sat[i], grd[i] = Rotate(sat[i], grd[i], reverse_perturb[1], polar)
+            rotated_sati, rotated_grdi = Rotate_tensor(sat[i], grd[i], reverse_perturb[1], polar)
+        else:
+            rotated_sati = sat[i]
+            rotated_grdi = grd[i]
 
         if reverse_perturb[0] == 1:
-            sat[i], grd[i] = HFlip(sat[i], grd[i])
+            reversed_sat_desc[i], reversed_grd_desc[i] = HFlip(rotated_sati, rotated_grdi)
+        else:
+            reversed_sat_desc[i] = rotated_sati
+            reversed_grd_desc[i] = rotated_grdi
 
-    sat = sat.permute(0,2,3,1)
-    grd = grd.permute(0,2,3,1)
+    reversed_sat_desc = reversed_sat_desc.permute(0,2,3,1)
+    reversed_grd_desc = reversed_grd_desc.permute(0,2,3,1)
 
-    return sat, grd
+    return reversed_sat_desc, reversed_grd_desc
 
 
 def Free_Rotation(sat, grd, degree, axis="h"):
@@ -167,10 +223,10 @@ def Free_Flip(sat, grd, degree):
 
 if __name__ == "__main__":
     # original descriptors
-    sat = torch.rand(32, 16, 16, 8)
+    # sat = torch.rand(32, 16, 16, 8)
     # sat = torch.rand(2, 4, 4, 3)
-    # sat = torch.rand(32, 8, 42, 8)
-    polar = False
+    sat = torch.rand(32, 8, 42, 8)
+    polar = True
     grd = torch.rand(32, 8, 42, 8)
     # grd = torch.rand(2, 2, 6, 3)
 
@@ -235,3 +291,10 @@ if __name__ == "__main__":
     # print(second_sat[0, :, :, :])
     print(torch.equal(sat, second_sat))
     print(torch.equal(grd, second_grd))
+    # for i in range(sat.shape[0]):
+    #     print(f"=============={i}==============")
+    #     print(torch.equal(sat[i], second_sat[i]))
+    #     print(torch.equal(grd[i], second_grd[i]))
+    #     print(torch.equal(sat[i], second_sat[i]))
+    #     print(torch.equal(grd[i], second_grd[i]))
+    #     print("================================")

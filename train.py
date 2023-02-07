@@ -27,6 +27,7 @@ from utils.utils import softMarginTripletLoss,\
      CFLoss, save_model, WarmupCosineSchedule, ReadConfig, validatenp
 
 args_do_not_overide = ['verbose', 'resume_from']
+torch.autograd.set_detect_anomaly(True)
 
 def GetBestModel(path):
     all_files = os.listdir(path)
@@ -195,6 +196,8 @@ if __name__ == "__main__":
         epoch_triplet_loss = 0
         if is_cf:
             epoch_cf_loss = 0
+        if opt.mutual:
+            epoch_mutual_loss = 0
 
         model.train() # set model to train
         for batch in tqdm(dataloader, disable = opt.verbose):
@@ -259,20 +262,24 @@ if __name__ == "__main__":
 
                 #reverse second half
                 perturb = [[int(batch_perturb[0][i]), batch_perturb[1][i]] for i in range(len(batch_perturb[1]))]
-                second_sat, second_grd = Reverse_Rotate_Flip(sat_desc_second, grd_desc_second, perturb, not opt.no_polar)
+                reversed_sat_desc_second, reversed_grd_desc_second = Reverse_Rotate_Flip(sat_desc_second, grd_desc_second, perturb, not opt.no_polar)
 
-                print(second_sat.shape)
-                print(second_grd.shape)
+                # print(second_sat.shape)
+                # print(second_grd.shape)
+
+                sat_mutual_loss = torch.nn.functional.smooth_l1_loss(reversed_sat_desc_second, sat_desc_first)
+                grd_mutual_loss = torch.nn.functional.smooth_l1_loss(reversed_grd_desc_second, grd_desc_first)
+                mutual_loss = sat_mutual_loss + grd_mutual_loss
+                loss += mutual_loss
+
+                epoch_mutual_loss += mutual_loss.item()
 
             loss.backward()
-
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
 
             optimizer.step()
 
-            print("epoch end....")
-            exit(0)
         # adjust lr
         lrSchedule.step()
 
@@ -286,8 +293,12 @@ if __name__ == "__main__":
             current_cf_loss = float(epoch_cf_loss) / float(len(dataloader))
             print(f"Epoch {epoch} CF_Loss: {current_cf_loss}")
             writer.add_scalar('cf_loss', current_cf_loss, epoch)
-        
-            
+
+        if opt.mutual:
+            current_mutual_loss = float(epoch_mutual_loss) / float(len(dataloader))
+            print(f"Epoch {epoch} MUTUAL_Loss: {current_mutual_loss}")
+            writer.add_scalar('mutual_loss', current_mutual_loss, epoch)
+
         print("----------------------")
 
 
