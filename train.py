@@ -312,7 +312,7 @@ if __name__ == "__main__":
                 sat = batch['satellite'].to(device)
                 grd = batch['ground'].to(device)
 
-                sat_global, grd_global, _ , _ = model(sat, grd, is_cf=False)
+                sat_global, grd_global, sat_desc , grd_desc = model(sat, grd, is_cf=False)
 
                 sat_global_descriptor[val_i: val_i + sat_global.shape[0], :] = sat_global.detach().cpu().numpy()
                 grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global.detach().cpu().numpy()
@@ -345,6 +345,11 @@ if __name__ == "__main__":
                 save_model(save_name, model, optimizer, lrSchedule, epoch, last=False)
             # save last model
             save_model(save_name, model, optimizer, lrSchedule, epoch, last=True)
+            # save descriptor to last model
+            np_sat_desc = sat_desc.detach().cpu().numpy()
+            np_grd_desc = grd_desc.detach().cpu().numpy()
+            np.save(os.path.join(save_name, "epoch_last", "sat_des.npy"), np_sat_desc)
+            np.save(os.path.join(save_name, "epoch_last", "grd_des.npy"), np_grd_desc)
             print(f"=================================================")
 
     # get the best model and recall
