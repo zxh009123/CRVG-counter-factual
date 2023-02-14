@@ -37,6 +37,8 @@ def GetBestModel(path):
     return os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
 
 if __name__ == "__main__":
+    os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
     parser.add_argument("--batch_size", type=int, default=32, help="size of the batches")
