@@ -78,6 +78,20 @@ class TRModule(nn.Module):
         output = self.transformer_encoder(src)
         return output
 
+class EfficientNetB3(nn.Module):
+    def __init__(self):
+        super().__init__()
+        net = models.efficientnet_b3(weights='DEFAULT')
+        layers = list(net.children())[:-2]
+        layers = list(layers[0].children())[:-3]
+
+        end_conv = [torch.nn.Conv2d(136, 128, 1), torch.nn.BatchNorm2d(128), torch.nn.SiLU(inplace=True)]
+
+        self.layers = torch.nn.Sequential(*layers, *end_conv)
+
+    def forward(self, x):
+        return self.layers(x)
+
 
 class ResNet34(nn.Module):
     def __init__(self):
@@ -87,11 +101,11 @@ class ResNet34(nn.Module):
         layers_end = list(net.children())[4:-2]
 
         # 4096
-        self.layers = nn.Sequential(*layers, *layers_end)
+        # self.layers = nn.Sequential(*layers, *layers_end)
 
         # 1024
-        # end_conv = [torch.nn.Conv2d(512, 128, 1), torch.nn.BatchNorm2d(128)]
-        # self.layers = torch.nn.Sequential(*layers, *layers_end, *end_conv)
+        end_conv = [torch.nn.Conv2d(512, 128, 1), torch.nn.BatchNorm2d(128)]
+        self.layers = torch.nn.Sequential(*layers, *layers_end, *end_conv)
 
     def forward(self, x):
         return self.layers(x)
@@ -141,8 +155,11 @@ class GeoDTR(nn.Module):
     def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True):
         super().__init__()
 
-        self.backbone_grd = ResNet34()
-        self.backbone_sat = ResNet34()
+        # self.backbone_grd = ResNet34()
+        # self.backbone_sat = ResNet34()
+
+        self.backbone_grd = EfficientNetB3()
+        self.backbone_sat = EfficientNetB3()
 
         if is_polar:
             in_dim_sat = 336
@@ -201,7 +218,7 @@ class GeoDTR(nn.Module):
             return sat_global, grd_global, sat_sa, grd_sa
 
 if __name__ == "__main__":
-    model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=2048, is_polar=True)
+    model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=4, dropout = 0.3, d_hid=512, is_polar=True)
     sat = torch.randn(7, 3, 122, 671)
     # sat = torch.randn(7, 3, 256, 256)
     grd = torch.randn(7, 3, 122, 671)
@@ -210,10 +227,10 @@ if __name__ == "__main__":
     for i in result:
         print(i.shape)
 
-    # macs, params = profile(model, inputs=(sat, grd, False, ))
-    # macs, params = clever_format([macs, params], "%.3f")
+    macs, params = profile(model, inputs=(sat, grd, False, ))
+    macs, params = clever_format([macs, params], "%.3f")
 
-    # print(macs)
-    # print(params)
+    print(macs)
+    print(params)
 
 
