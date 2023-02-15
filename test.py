@@ -95,7 +95,7 @@ if __name__ == "__main__":
     print("number of test samples : ", len(dataset))
 
     model = GeoDTR(descriptors=number_descriptors, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
-    embedding_dims = number_descriptors * 512
+    embedding_dims = number_descriptors * 128
     
     model = nn.DataParallel(model)
     model.to(device)
