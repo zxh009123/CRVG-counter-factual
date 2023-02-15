@@ -24,7 +24,8 @@ import json
 from models.GeoDTR import GeoDTR
 
 from utils.utils import softMarginTripletLoss,\
-     CFLoss, save_model, WarmupCosineSchedule, ReadConfig, validatenp
+     CFLoss, save_model, WarmupCosineSchedule, ReadConfig,\
+     validatenp, SaveDescriptors
 
 args_do_not_overide = ['verbose', 'resume_from']
 torch.autograd.set_detect_anomaly(True)
@@ -345,13 +346,13 @@ if __name__ == "__main__":
                 best_epoch['acc'] = top1
                 best_epoch['epoch'] = epoch
                 save_model(save_name, model, optimizer, lrSchedule, epoch, last=False)
+            # For each 10th epoch save the descriptors
+            if epoch % 10 == 0:
+                SaveDescriptors(sat_desc, grd_desc, epoch, last=False)
             # save last model
             save_model(save_name, model, optimizer, lrSchedule, epoch, last=True)
             # save descriptor to last model
-            np_sat_desc = sat_desc.detach().cpu().numpy()
-            np_grd_desc = grd_desc.detach().cpu().numpy()
-            np.save(os.path.join(save_name, "epoch_last", "sat_des.npy"), np_sat_desc)
-            np.save(os.path.join(save_name, "epoch_last", "grd_des.npy"), np_grd_desc)
+            SaveDescriptors(sat_desc, grd_desc, epoch, last=True)
             print(f"=================================================")
 
     # get the best model and recall

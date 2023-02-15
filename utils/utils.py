@@ -6,6 +6,25 @@ from torch.optim.lr_scheduler import LambdaLR
 import torch.nn.functional as F
 import json
 
+def SaveDescriptors(sat_des, grd_des, epoch, save_name, last=True):
+    np_sat_desc = sat_des.detach().cpu().numpy()
+    np_grd_desc = grd_des.detach().cpu().numpy()
+
+    # save to last epoch folder
+    if last == True:
+        np.save(os.path.join(save_name, "epoch_last", "sat_des.npy"), np_sat_desc)
+        np.save(os.path.join(save_name, "epoch_last", "grd_des.npy"), np_grd_desc)
+    else: 
+        #Save to a specific folder called descriptors. 
+        #In there a bunch of subfolder (epoch_X) to save sat and grd desciptors
+        descriptors_path = os.path.join(save_name, "descriptors", f"epoch_{epoch}")
+
+        if not os.path.exists(descriptors_path):
+            os.makedirs(descriptors_path)
+
+        np.save(os.path.join(descriptors_path, "sat_des.npy"), np_sat_desc)
+        np.save(os.path.join(descriptors_path, "grd_des.npy"), np_grd_desc)
+
 def ReadConfig(path):
     all_files = os.listdir(path)
     config_file =  list(filter(lambda x: x.endswith('parameter.json'), all_files))
