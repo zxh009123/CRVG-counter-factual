@@ -152,14 +152,15 @@ class GeoLayoutExtractor(nn.Module):
 
 
 class GeoDTR(nn.Module):
-    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True):
+    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, ARCH="efficientnet"):
         super().__init__()
 
-        # self.backbone_grd = ResNet34()
-        # self.backbone_sat = ResNet34()
-
-        self.backbone_grd = EfficientNetB3()
-        self.backbone_sat = EfficientNetB3()
+        if ARCH == "resnet":
+            self.backbone_grd = ResNet34()
+            self.backbone_sat = ResNet34()
+        else:
+            self.backbone_grd = EfficientNetB3()
+            self.backbone_sat = EfficientNetB3()
 
         if is_polar:
             in_dim_sat = 336
