@@ -348,11 +348,11 @@ if __name__ == "__main__":
                 save_model(save_name, model, optimizer, lrSchedule, epoch, last=False)
             # For each 10th epoch save the descriptors
             if epoch % 10 == 0:
-                SaveDescriptors(sat_desc, grd_desc, epoch, last=False)
+                SaveDescriptors(sat_desc, grd_desc, epoch, save_name, last=False)
             # save last model
             save_model(save_name, model, optimizer, lrSchedule, epoch, last=True)
             # save descriptor to last model
-            SaveDescriptors(sat_desc, grd_desc, epoch, last=True)
+            SaveDescriptors(sat_desc, grd_desc, epoch, save_name, last=True)
             print(f"=================================================")
 
     # get the best model and recall
