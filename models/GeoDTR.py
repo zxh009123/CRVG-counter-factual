@@ -4,8 +4,8 @@ import torch.nn.functional as F
 import torchvision.models as models
 import os
 import random
-from thop import profile
-from thop import clever_format
+# from thop import profile
+# from thop import clever_format
 if os.environ["USER"] == "xyli1905":
     from models.TR import TransformerEncoder, TransformerEncoderLayer
 else:
@@ -78,6 +78,17 @@ class TRModule(nn.Module):
         output = self.transformer_encoder(src)
         return output
 
+class ConvNextTiny(nn.Module):
+    def __init__(self):
+        super().__init__()
+        net = models.convnext_tiny(weights='DEFAULT')
+        layers = list(net.children())[:-2]
+        self.net = torch.nn.Sequential(*layers)
+        print(self.net)
+    
+    def forward(self, x):
+        return self.net(x)
+
 class EfficientNetB3(nn.Module):
     def __init__(self):
         super().__init__()
@@ -109,6 +120,33 @@ class ResNet34(nn.Module):
 
     def forward(self, x):
         return self.layers(x)
+
+class SCGeoLayoutExtractor(nn.Module):
+    def __init__(self, max_len=768, d_model=60, descriptors=8, tr_heads=4, tr_layers=6, dropout = 0.3, d_hid=2048):
+        super().__init__()
+
+        self.tr_layers = tr_layers
+
+        if self.tr_layers != 0:
+            encoder_layers = TransformerEncoderLayer(d_model, tr_heads, d_hid, dropout, activation='gelu', batch_first=True)
+            layer_norm = nn.LayerNorm(d_model)
+            self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = tr_layers, norm=layer_norm)
+            self.pe = LearnablePE(d_model, dropout = dropout, max_len = max_len)
+
+        self.depthwise = nn.Conv2d(max_len, max_len, kernel_size=3, padding=1, groups=max_len) 
+        self.pointwise = nn.Conv2d(max_len, descriptors, kernel_size=1) 
+
+    def forward(self, x):
+        B,C,H,W = x.shape[0], x.shape[1], x.shape[2], x.shape[3]
+        x = x.reshape(B, C, H*W)
+        if self.tr_layers != 0:
+            x = self.pe(x)
+            x = self.transformer_encoder(x)
+        x = x.reshape(B,C,H,W)
+        x = self.pointwise(self.depthwise(x))
+        x = x.permute(0, 2, 3, 1)
+        return x
+
 
 class GeoLayoutExtractor(nn.Module):
     def __init__(self, in_dim, descriptors=8, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048):
@@ -219,19 +257,32 @@ class GeoDTR(nn.Module):
             return sat_global, grd_global, sat_sa, grd_sa
 
 if __name__ == "__main__":
-    model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=4, dropout = 0.3, d_hid=512, is_polar=True)
-    sat = torch.randn(7, 3, 122, 671)
-    # sat = torch.randn(7, 3, 256, 256)
-    grd = torch.randn(7, 3, 122, 671)
-    result = model(sat, grd, True)
+    # model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=4, dropout = 0.3, d_hid=512, is_polar=True)
+    # sat = torch.randn(7, 3, 122, 671)
+    # # sat = torch.randn(7, 3, 256, 256)
+    # grd = torch.randn(7, 3, 122, 671)
+    # result = model(sat, grd, True)
 
-    for i in result:
-        print(i.shape)
+    # for i in result:
+    #     print(i.shape)
 
-    macs, params = profile(model, inputs=(sat, grd, False, ))
-    macs, params = clever_format([macs, params], "%.3f")
+    # macs, params = profile(model, inputs=(sat, grd, False, ))
+    # macs, params = clever_format([macs, params], "%.3f")
 
-    print(macs)
-    print(params)
+    # print(macs)
+    # print(params)
+
+    net = SCGeoLayoutExtractor(\
+        max_len=768, 
+        d_model=60, \
+        descriptors=8, \
+        tr_heads=4, \
+        tr_layers=2, \
+        dropout = 0.3, \
+        d_hid=2048)
+    sat = torch.randn(7, 768, 3, 20)
+    x = net(sat)
+    print(x.shape)
+
 
 
