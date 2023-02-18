@@ -47,10 +47,10 @@ if __name__ == "__main__":
     parser.add_argument("--save_suffix", type=str, default='_aug_strong', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch', help='dir to the dataset')
     parser.add_argument('--dataset', default='CVUSA', choices=['CVUSA', 'CVACT'], help='which dataset to use') 
-    parser.add_argument("--descriptors", type=int, default=8, help='number of descriptors')
+    parser.add_argument("--descriptors", type=int, default=4, help='number of descriptors')
     parser.add_argument("--TR_heads", type=int, default=4, help='number of heads in Transformer')
-    parser.add_argument("--TR_layers", type=int, default=4, help='number of layers in Transformer')
-    parser.add_argument("--TR_dim", type=int, default=512, help='dim of FFD in Transformer')
+    parser.add_argument("--TR_layers", type=int, default=2, help='number of layers in Transformer')
+    parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument("--weight_decay", type=float, default=0.03, help='weight decay value for optimizer')
@@ -169,7 +169,7 @@ if __name__ == "__main__":
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
     model = GeoDTR(descriptors=number_descriptors, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
-    embedding_dims = number_descriptors * 128
+    embedding_dims = number_descriptors * 768
 
     model = nn.DataParallel(model)
     model.to(device)
@@ -253,11 +253,11 @@ if __name__ == "__main__":
 
             # mutual loss
             if opt.mutual:
-                grd_desc = grd_desc.reshape((grd_desc.shape[0], 8, 42, opt.descriptors))
+                grd_desc = grd_desc.reshape((grd_desc.shape[0], 3, 20, opt.descriptors))
                 if opt.no_polar:
-                    sat_desc = sat_desc.reshape((sat_desc.shape[0], 16, 16, opt.descriptors))
+                    sat_desc = sat_desc.reshape((sat_desc.shape[0], 8, 8, opt.descriptors))
                 else:
-                    sat_desc = sat_desc.reshape((sat_desc.shape[0], 8, 42, opt.descriptors))
+                    sat_desc = sat_desc.reshape((sat_desc.shape[0], 3, 20, opt.descriptors))
 
                 # split into first and second half
                 grd_desc_first, grd_desc_second = torch.tensor_split(grd_desc, 2)

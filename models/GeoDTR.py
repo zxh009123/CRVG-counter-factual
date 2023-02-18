@@ -4,8 +4,8 @@ import torch.nn.functional as F
 import torchvision.models as models
 import os
 import random
-# from thop import profile
-# from thop import clever_format
+from thop import profile
+from thop import clever_format
 if os.environ["USER"] == "xyli1905":
     from models.TR import TransformerEncoder, TransformerEncoderLayer
 else:
@@ -81,10 +81,9 @@ class TRModule(nn.Module):
 class ConvNextTiny(nn.Module):
     def __init__(self):
         super().__init__()
-        net = models.convnext_tiny(weights='DEFAULT')
+        net = models.convnext_tiny(weights='IMAGENET1K_V1')
         layers = list(net.children())[:-2]
         self.net = torch.nn.Sequential(*layers)
-        print(self.net)
     
     def forward(self, x):
         return self.net(x)
@@ -112,11 +111,11 @@ class ResNet34(nn.Module):
         layers_end = list(net.children())[4:-2]
 
         # 4096
-        # self.layers = nn.Sequential(*layers, *layers_end)
+        self.layers = nn.Sequential(*layers, *layers_end)
 
         # 1024
-        end_conv = [torch.nn.Conv2d(512, 128, 1), torch.nn.BatchNorm2d(128)]
-        self.layers = torch.nn.Sequential(*layers, *layers_end, *end_conv)
+        # end_conv = [torch.nn.Conv2d(512, 128, 1), torch.nn.BatchNorm2d(128)]
+        # self.layers = torch.nn.Sequential(*layers, *layers_end, *end_conv)
 
     def forward(self, x):
         return self.layers(x)
@@ -124,8 +123,9 @@ class ResNet34(nn.Module):
 class SCGeoLayoutExtractor(nn.Module):
     def __init__(self, max_len=768, d_model=60, descriptors=8, tr_heads=4, tr_layers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
-
         self.tr_layers = tr_layers
+
+        self.descriptors = descriptors
 
         if self.tr_layers != 0:
             encoder_layers = TransformerEncoderLayer(d_model, tr_heads, d_hid, dropout, activation='gelu', batch_first=True)
@@ -138,13 +138,14 @@ class SCGeoLayoutExtractor(nn.Module):
 
     def forward(self, x):
         B,C,H,W = x.shape[0], x.shape[1], x.shape[2], x.shape[3]
-        x = x.reshape(B, C, H*W)
+        x = x.view(B, C, H*W)
         if self.tr_layers != 0:
             x = self.pe(x)
             x = self.transformer_encoder(x)
-        x = x.reshape(B,C,H,W)
+        x = x.view(B,C,H,W)
         x = self.pointwise(self.depthwise(x))
-        x = x.permute(0, 2, 3, 1)
+        x = x.view(B,self.descriptors,H*W)
+        x = x.permute(0, 2, 1)
         return x
 
 
@@ -190,26 +191,37 @@ class GeoLayoutExtractor(nn.Module):
 
 
 class GeoDTR(nn.Module):
-    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, ARCH="efficientnet"):
+    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True):
         super().__init__()
 
-        if ARCH == "resnet":
-            self.backbone_grd = ResNet34()
-            self.backbone_sat = ResNet34()
+        # TODO add a variable to control number of output channels
+        self.backbone_grd = ConvNextTiny()
+        self.backbone_sat = ConvNextTiny()
+
+        if is_polar == True:
+            sat_model_dim = 60
         else:
-            self.backbone_grd = EfficientNetB3()
-            self.backbone_sat = EfficientNetB3()
+            sat_model_dim = 64
 
-        if is_polar:
-            in_dim_sat = 336
-            in_dim_grd = 336
-        else:
-            in_dim_sat = 256
-            in_dim_grd = 336
-
-        self.GLE_grd = GeoLayoutExtractor(in_dim=in_dim_grd, descriptors=descriptors, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
-
-        self.GLE_sat = GeoLayoutExtractor(in_dim=in_dim_sat, descriptors=descriptors, tr_heads=tr_heads, tr_layers=tr_layers, dropout = dropout, d_hid=d_hid)
+        # Here 768 is fixed to backbone ouput channel
+        # d_model is fixed to backbone output H*W
+        self.GLE_grd = SCGeoLayoutExtractor(\
+                        max_len=768, 
+                        d_model=60, \
+                        descriptors=descriptors, \
+                        tr_heads=tr_heads, \
+                        tr_layers=tr_layers, \
+                        dropout = dropout, \
+                        d_hid=d_hid)
+        
+        self.GLE_sat = SCGeoLayoutExtractor(\
+                        max_len=768, 
+                        d_model=sat_model_dim, \
+                        descriptors=descriptors, \
+                        tr_heads=tr_heads, \
+                        tr_layers=tr_layers, \
+                        dropout = dropout, \
+                        d_hid=d_hid)
 
 
     def forward(self, sat, grd, is_cf):
@@ -218,15 +230,18 @@ class GeoDTR(nn.Module):
         sat_x = self.backbone_sat(sat)
         grd_x = self.backbone_grd(grd)
 
-        sat_x = sat_x.view(b, sat_x.shape[1], -1)
-        grd_x = grd_x.view(b, grd_x.shape[1], -1)
         sat_sa = self.GLE_sat(sat_x)
         grd_sa = self.GLE_grd(grd_x)
         sat_sa = F.hardtanh(sat_sa)
         grd_sa = F.hardtanh(grd_sa)
 
-        # print("sat_sa shape : ", sat_x.shape)
-        # print("grd_sa shape : ", grd_x.shape)
+        sat_x = sat_x.view(b, sat_x.shape[1], sat_x.shape[2]*sat_x.shape[3])
+        grd_x = grd_x.view(b, grd_x.shape[1], grd_x.shape[2]*grd_x.shape[3])
+
+        # print("sat_x shape : ", sat_x.shape)
+        # print("grd_x shape : ", grd_x.shape)
+        # print("sat_sa shape : ", sat_sa.shape)
+        # print("grd_sa shape : ", grd_sa.shape)
 
         if is_cf:
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1.0, 1.0)
@@ -257,32 +272,32 @@ class GeoDTR(nn.Module):
             return sat_global, grd_global, sat_sa, grd_sa
 
 if __name__ == "__main__":
-    # model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=4, dropout = 0.3, d_hid=512, is_polar=True)
+    model = GeoDTR(descriptors=4, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=1024, is_polar=False)
     # sat = torch.randn(7, 3, 122, 671)
-    # # sat = torch.randn(7, 3, 256, 256)
-    # grd = torch.randn(7, 3, 122, 671)
-    # result = model(sat, grd, True)
+    sat = torch.randn(7, 3, 256, 256)
+    grd = torch.randn(7, 3, 122, 671)
+    result = model(sat, grd, True)
 
-    # for i in result:
-    #     print(i.shape)
+    for i in result:
+        print(i.shape)
 
-    # macs, params = profile(model, inputs=(sat, grd, False, ))
-    # macs, params = clever_format([macs, params], "%.3f")
+    macs, params = profile(model, inputs=(sat, grd, False, ))
+    macs, params = clever_format([macs, params], "%.3f")
 
-    # print(macs)
-    # print(params)
+    print(macs)
+    print(params)
 
-    net = SCGeoLayoutExtractor(\
-        max_len=768, 
-        d_model=60, \
-        descriptors=8, \
-        tr_heads=4, \
-        tr_layers=2, \
-        dropout = 0.3, \
-        d_hid=2048)
-    sat = torch.randn(7, 768, 3, 20)
-    x = net(sat)
-    print(x.shape)
+    # net = SCGeoLayoutExtractor(\
+    #     max_len=768, 
+    #     d_model=60, \
+    #     descriptors=8, \
+    #     tr_heads=4, \
+    #     tr_layers=2, \
+    #     dropout = 0.3, \
+    #     d_hid=2048)
+    # sat = torch.randn(7, 768, 3, 20)
+    # x = net(sat)
+    # print(x.shape)
 
 
 

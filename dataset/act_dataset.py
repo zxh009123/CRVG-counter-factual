@@ -168,10 +168,10 @@ class ACTDataset(Dataset):
             raise RuntimeError(f"sematic augmentation {sematic_aug} is not implemented")
 
         transforms_sat.append(transforms.ToTensor())
-        transforms_sat.append(transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5)))
+        transforms_sat.append(transforms.Normalize(mean = (0.485, 0.456, 0.406), std = (0.229, 0.224, 0.225)))
 
         transforms_street.append(transforms.ToTensor())
-        transforms_street.append(transforms.Normalize(mean = (0.5, 0.5, 0.5), std = (0.5, 0.5, 0.5)))
+        transforms_street.append(transforms.Normalize(mean = (0.485, 0.456, 0.406), std = (0.229, 0.224, 0.225)))
 
         self.transforms_sat = transforms.Compose(transforms_sat)
         self.transforms_grd = transforms.Compose(transforms_street)
