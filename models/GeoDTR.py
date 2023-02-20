@@ -86,7 +86,7 @@ class ConvNextTiny(nn.Module):
         self.net = torch.nn.Sequential(*layers)
     
     def forward(self, x):
-        return self.net(x)
+        return self.net(x) # (B, 768, H/32, W/32)
 
 class EfficientNetB3(nn.Module):
     def __init__(self):
@@ -121,7 +121,7 @@ class ResNet34(nn.Module):
         return self.layers(x)
 
 class SCGeoLayoutExtractor(nn.Module):
-    def __init__(self, max_len=768, d_model=60, descriptors=8, tr_heads=4, tr_layers=6, dropout = 0.3, d_hid=2048):
+    def __init__(self, max_len=60, d_model=768, descriptors=8, tr_heads=4, tr_layers=6, dropout = 0.3, d_hid=2048):
         super().__init__()
         self.tr_layers = tr_layers
 
@@ -133,12 +133,13 @@ class SCGeoLayoutExtractor(nn.Module):
             self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = tr_layers, norm=layer_norm)
             self.pe = LearnablePE(d_model, dropout = dropout, max_len = max_len)
 
-        self.depthwise = nn.Conv2d(max_len, max_len, kernel_size=3, padding=1, groups=max_len) 
-        self.pointwise = nn.Conv2d(max_len, descriptors, kernel_size=1) 
+        self.depthwise = nn.Conv2d(d_model, d_model, kernel_size=3, padding=1, groups=d_model) 
+        self.pointwise = nn.Conv2d(d_model, descriptors, kernel_size=1) 
 
     def forward(self, x):
         B,C,H,W = x.shape[0], x.shape[1], x.shape[2], x.shape[3]
         x = x.view(B, C, H*W)
+        x = x.permute(0, 2, 1)
         if self.tr_layers != 0:
             x = self.pe(x)
             x = self.transformer_encoder(x)
@@ -199,15 +200,15 @@ class GeoDTR(nn.Module):
         self.backbone_sat = ConvNextTiny()
 
         if is_polar == True:
-            sat_model_dim = 60
+            sat_model_length = 60
         else:
-            sat_model_dim = 64
+            sat_model_length = 64
 
         # Here 768 is fixed to backbone ouput channel
         # d_model is fixed to backbone output H*W
         self.GLE_grd = SCGeoLayoutExtractor(\
-                        max_len=768, 
-                        d_model=60, \
+                        max_len=60, 
+                        d_model=768, \
                         descriptors=descriptors, \
                         tr_heads=tr_heads, \
                         tr_layers=tr_layers, \
@@ -215,8 +216,8 @@ class GeoDTR(nn.Module):
                         d_hid=d_hid)
         
         self.GLE_sat = SCGeoLayoutExtractor(\
-                        max_len=768, 
-                        d_model=sat_model_dim, \
+                        max_len=sat_model_length, 
+                        d_model=768, \
                         descriptors=descriptors, \
                         tr_heads=tr_heads, \
                         tr_layers=tr_layers, \
@@ -230,6 +231,9 @@ class GeoDTR(nn.Module):
         sat_x = self.backbone_sat(sat)
         grd_x = self.backbone_grd(grd)
 
+        # print("sat_x shape : ", sat_x.shape)
+        # print("grd_x shape : ", grd_x.shape)
+
         sat_sa = self.GLE_sat(sat_x)
         grd_sa = self.GLE_grd(grd_x)
         sat_sa = F.hardtanh(sat_sa)
@@ -238,8 +242,6 @@ class GeoDTR(nn.Module):
         sat_x = sat_x.view(b, sat_x.shape[1], sat_x.shape[2]*sat_x.shape[3])
         grd_x = grd_x.view(b, grd_x.shape[1], grd_x.shape[2]*grd_x.shape[3])
 
-        # print("sat_x shape : ", sat_x.shape)
-        # print("grd_x shape : ", grd_x.shape)
         # print("sat_sa shape : ", sat_sa.shape)
         # print("grd_sa shape : ", grd_sa.shape)
 
