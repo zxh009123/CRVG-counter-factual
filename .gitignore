@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+visualization/
 *.py[cod]
 *$py.class
 *.pth
@@ -21,7 +22,6 @@ lib/
 lib64/
 parts/
 sdist/
-Matlab/
 var/
 wheels/
 share/python-wheels/

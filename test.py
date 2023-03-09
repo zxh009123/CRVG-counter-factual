@@ -80,6 +80,8 @@ if __name__ == "__main__":
     STREET_IMG_WIDTH = 671
     STREET_IMG_HEIGHT = 122
 
+    DESC_LENGTH = 384
+
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     
@@ -95,7 +97,7 @@ if __name__ == "__main__":
     print("number of test samples : ", len(dataset))
 
     model = GeoDTR(descriptors=number_descriptors, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
-    embedding_dims = number_descriptors * 128
+    embedding_dims = number_descriptors * DESC_LENGTH
     
     model = nn.DataParallel(model)
     model.to(device)

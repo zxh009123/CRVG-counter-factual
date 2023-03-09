@@ -98,15 +98,25 @@ if __name__ == "__main__":
         SATELLITE_IMG_WIDTH = 256
         SATELLITE_IMG_HEIGHT = 256
         polar_transformation = False
+        SAT_DESC_HEIGHT = 16
+        SAT_DESC_WIDTH = 16
     else:
         SATELLITE_IMG_WIDTH = 671
         SATELLITE_IMG_HEIGHT = 122
         polar_transformation = True
+        SAT_DESC_HEIGHT = 7
+        SAT_DESC_WIDTH = 41
     print("SATELLITE_IMG_WIDTH:",SATELLITE_IMG_WIDTH)
     print("SATELLITE_IMG_HEIGHT:",SATELLITE_IMG_HEIGHT)
 
     STREET_IMG_WIDTH = 671
     STREET_IMG_HEIGHT = 122
+
+    GRD_DESC_HEIGHT = 7
+    GRD_DESC_WIDTH = 41
+
+    # feature length for each descriptor
+    DESC_LENGTH = 384
 
     # generate time stamp
     gmt = time.gmtime()
@@ -169,7 +179,7 @@ if __name__ == "__main__":
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
     model = GeoDTR(descriptors=number_descriptors, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
-    embedding_dims = number_descriptors * 768
+    embedding_dims = number_descriptors * DESC_LENGTH
 
     model = nn.DataParallel(model)
     model.to(device)
@@ -253,11 +263,8 @@ if __name__ == "__main__":
 
             # mutual loss
             if opt.mutual:
-                grd_desc = grd_desc.reshape((grd_desc.shape[0], 3, 20, opt.descriptors))
-                if opt.no_polar:
-                    sat_desc = sat_desc.reshape((sat_desc.shape[0], 8, 8, opt.descriptors))
-                else:
-                    sat_desc = sat_desc.reshape((sat_desc.shape[0], 3, 20, opt.descriptors))
+                grd_desc = grd_desc.reshape((grd_desc.shape[0], GRD_DESC_HEIGHT, GRD_DESC_WIDTH, opt.descriptors))
+                sat_desc = sat_desc.reshape((sat_desc.shape[0], SAT_DESC_HEIGHT, SAT_DESC_WIDTH, opt.descriptors))
 
                 # split into first and second half
                 grd_desc_first, grd_desc_second = torch.tensor_split(grd_desc, 2)

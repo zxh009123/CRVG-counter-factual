@@ -4,8 +4,8 @@ import torch.nn.functional as F
 import torchvision.models as models
 import os
 import random
-from thop import profile
-from thop import clever_format
+# from thop import profile
+# from thop import clever_format
 if os.environ["USER"] == "xyli1905":
     from models.TR import TransformerEncoder, TransformerEncoderLayer
 else:
@@ -83,7 +83,9 @@ class ConvNextTiny(nn.Module):
         super().__init__()
         net = models.convnext_tiny(weights='IMAGENET1K_V1')
         layers = list(net.children())[:-2]
+        layers = list(layers[0].children())[:-2]
         self.net = torch.nn.Sequential(*layers)
+        # print(self.net)
     
     def forward(self, x):
         return self.net(x) # (B, 768, H/32, W/32)
@@ -192,23 +194,36 @@ class GeoLayoutExtractor(nn.Module):
 
 
 class GeoDTR(nn.Module):
-    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True):
+    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, backbone='convnext'):
         super().__init__()
 
-        # TODO add a variable to control number of output channels
-        self.backbone_grd = ConvNextTiny()
-        self.backbone_sat = ConvNextTiny()
-
-        if is_polar == True:
-            sat_model_length = 60
+        # TODO Debug the following code
+        if backbone == 'convnext':
+            self.backbone_grd = ConvNextTiny()
+            self.backbone_sat = ConvNextTiny()
+            output_channel = 384
+            grd_feature_size = 287 # 7 * 41
+            if is_polar:
+                sat_feature_size = 287 # 7 * 41
+            else:
+                sat_feature_size = 256 # 16 * 16
+        elif backbone == 'resnet':
+            self.backbone_grd = ResNet34()
+            self.backbone_sat = ResNet34()
+            output_channel = 512
+            grd_feature_size = 336 # 7 * 41
+            if is_polar:
+                sat_feature_size = 336 # 7 * 41
+            else:
+                sat_feature_size = 256 # 16 * 16
         else:
-            sat_model_length = 64
+            raise RuntimeError(f'backbone: {backbone} is not implemented')
 
         # Here 768 is fixed to backbone ouput channel
         # d_model is fixed to backbone output H*W
         self.GLE_grd = SCGeoLayoutExtractor(\
-                        max_len=60, 
-                        d_model=768, \
+                        max_len=grd_feature_size, 
+                        d_model=output_channel, \
                         descriptors=descriptors, \
                         tr_heads=tr_heads, \
                         tr_layers=tr_layers, \
@@ -216,8 +231,8 @@ class GeoDTR(nn.Module):
                         d_hid=d_hid)
         
         self.GLE_sat = SCGeoLayoutExtractor(\
-                        max_len=sat_model_length, 
-                        d_model=768, \
+                        max_len=sat_feature_size, 
+                        d_model=output_channel, \
                         descriptors=descriptors, \
                         tr_heads=tr_heads, \
                         tr_layers=tr_layers, \
@@ -246,9 +261,38 @@ class GeoDTR(nn.Module):
         # print("grd_sa shape : ", grd_sa.shape)
 
         if is_cf:
+            # fake_sat_x = sat_x.clone().detach()
+            # fake_grd_x = grd_x.clone().detach()
+
+            # upper_half_sat, lower_half_sat = torch.split(fake_sat_x, [b // 2, b // 2], dim=0)
+            # upper_half_grd, lower_half_grd = torch.split(fake_grd_x, [b // 2, b // 2], dim=0)
+
+            # fake_sat_x = torch.cat([lower_half_sat, upper_half_sat], dim=0)
+            # fake_grd_x = torch.cat([lower_half_grd, upper_half_grd], dim=0)
+
+            # sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
+            # grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
+
+            # sat_global = F.normalize(sat_global, p=2, dim=1)
+            # grd_global = F.normalize(grd_global, p=2, dim=1)
+
+            # fake_sat_global = torch.matmul(fake_sat_x, sat_sa).view(b,-1)
+            # fake_grd_global = torch.matmul(fake_grd_x, grd_sa).view(b,-1)
+
+            # fake_sat_global = F.normalize(fake_sat_global, p=2, dim=1)
+            # fake_grd_global = F.normalize(fake_grd_global, p=2, dim=1)
+
+            # return sat_global, grd_global, fake_sat_global, fake_grd_global, sat_sa, grd_sa
+
+            # fake_sat_sa = sat_sa.clone()
+            # fake_grd_sa = grd_sa.clone()
+            # upper_half_sat, lower_half_sat = torch.split(fake_sat_sa, [b // 2, b // 2], dim=0)
+            # upper_half_grd, lower_half_grd = torch.split(fake_grd_sa, [b // 2, b // 2], dim=0)
+            # fake_sat_sa = torch.cat([lower_half_sat, upper_half_sat], dim=0)
+            # fake_grd_sa = torch.cat([lower_half_grd, upper_half_grd], dim=0)
+
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1.0, 1.0)
             fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1.0, 1.0)
-
 
             sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
             grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
@@ -274,20 +318,21 @@ class GeoDTR(nn.Module):
             return sat_global, grd_global, sat_sa, grd_sa
 
 if __name__ == "__main__":
-    model = GeoDTR(descriptors=4, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=1024, is_polar=False)
-    # sat = torch.randn(7, 3, 122, 671)
-    sat = torch.randn(7, 3, 256, 256)
-    grd = torch.randn(7, 3, 122, 671)
+    sat = torch.randn(8, 3, 122, 671)
+    # sat = torch.randn(8, 3, 256, 256)
+    grd = torch.randn(8, 3, 122, 671)
+
+    model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=1024, is_polar=True, backbone='convnext')
     result = model(sat, grd, True)
 
     for i in result:
         print(i.shape)
 
-    macs, params = profile(model, inputs=(sat, grd, False, ))
-    macs, params = clever_format([macs, params], "%.3f")
+    # macs, params = profile(model, inputs=(sat, grd, False, ))
+    # macs, params = clever_format([macs, params], "%.3f")
 
-    print(macs)
-    print(params)
+    # print(macs)
+    # print(params)
 
     # net = SCGeoLayoutExtractor(\
     #     max_len=768, 
@@ -300,6 +345,10 @@ if __name__ == "__main__":
     # sat = torch.randn(7, 768, 3, 20)
     # x = net(sat)
     # print(x.shape)
+
+    # m = ConvNextTiny()
+    # result = m(sat)
+    # print(result.shape)
 
 
 
