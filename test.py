@@ -19,7 +19,6 @@ from utils.utils import ReadConfig, validatenp
 
 from models.GeoDTR import GeoDTR
 
-
 args_do_not_overide = ['data_dir', 'verbose', 'dataset']
 
 def count_parameters(model):
@@ -52,6 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--dropout", type=float, default=0.2, help='dropout in Transformer')
     parser.add_argument('--validate', default=True, action='store_false', help='perform validate or not')
     parser.add_argument('--save', default='none', choices=['none', 'mat', 'pt'], help='save extracted features into .mat files or pt files')
+    parser.add_argument('--backbone', type=str, default='resnet', help='backbone selection')
 
     opt = parser.parse_args()
 
@@ -96,7 +96,14 @@ if __name__ == "__main__":
     
     print("number of test samples : ", len(dataset))
 
-    model = GeoDTR(descriptors=number_descriptors, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
+    model = GeoDTR(descriptors=number_descriptors, \
+                    tr_heads=opt.TR_heads, \
+                    tr_layers=opt.TR_layers, \
+                    dropout = opt.dropout, \
+                    d_hid=opt.TR_dim, \
+                    is_polar=polar_transformation, \
+                    backbone=opt.backbone, \
+                    dataset = opt.dataset)
     embedding_dims = number_descriptors * DESC_LENGTH
     
     model = nn.DataParallel(model)

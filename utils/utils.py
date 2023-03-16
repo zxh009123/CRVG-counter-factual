@@ -57,6 +57,7 @@ def softMarginTripletLoss(sate_vecs, pano_vecs, loss_weight=10.0, hard_topk_rati
     pos_dists = torch.diag(dists)
     N = len(pos_dists)
     diag_ids = np.arange(N)
+    
     num_hard_triplets = int(hard_topk_ratio * (N * (N - 1))) if hard_topk_ratio < 1.0 else N * (N - 1)
 
     # Match from satellite to street pano

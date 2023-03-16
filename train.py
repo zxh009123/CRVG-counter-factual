@@ -28,6 +28,7 @@ from utils.utils import softMarginTripletLoss,\
      validatenp, SaveDescriptors
 
 args_do_not_overide = ['verbose', 'resume_from']
+backbone_lists = ['resnet', 'convnext']
 torch.autograd.set_detect_anomaly(True)
 
 def GetBestModel(path):
@@ -50,7 +51,7 @@ if __name__ == "__main__":
     parser.add_argument("--descriptors", type=int, default=4, help='number of descriptors')
     parser.add_argument("--TR_heads", type=int, default=4, help='number of heads in Transformer')
     parser.add_argument("--TR_layers", type=int, default=2, help='number of layers in Transformer')
-    parser.add_argument("--TR_dim", type=int, default=2048, help='dim of FFD in Transformer')
+    parser.add_argument("--TR_dim", type=int, default=512, help='dim of FFD in Transformer')
     parser.add_argument("--dropout", type=float, default=0.3, help='dropout in Transformer')
     parser.add_argument("--gamma", type=float, default=10.0, help='value for gamma')
     parser.add_argument("--weight_decay", type=float, default=0.03, help='weight decay value for optimizer')
@@ -61,6 +62,7 @@ if __name__ == "__main__":
     parser.add_argument('--geo_aug', default='strong', choices=['strong', 'weak', 'none'], help='geometric augmentation strength') 
     parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength')
     parser.add_argument('--mutual', default=False, action='store_true', help='no mutual learning')
+    parser.add_argument('--backbone', type=str, default='resnet', help='backbone selection')
 
 
     opt = parser.parse_args()
@@ -79,6 +81,10 @@ if __name__ == "__main__":
                 setattr(opt, k, v)
         else: # if directory invalid
             raise RuntimeError(f'Cannot find resume model directory{opt.resume_from}')
+    
+    if opt.backbone not in backbone_lists:
+        raise RuntimeError(f'{opt.backbone} is no supported!')
+
 
     batch_size = opt.batch_size
     number_of_epoch = opt.epochs
@@ -104,26 +110,35 @@ if __name__ == "__main__":
         SATELLITE_IMG_WIDTH = 671
         SATELLITE_IMG_HEIGHT = 122
         polar_transformation = True
-        SAT_DESC_HEIGHT = 7
-        SAT_DESC_WIDTH = 41
+        if opt.backbone == "convnext":
+            SAT_DESC_HEIGHT = 7
+            SAT_DESC_WIDTH = 41
+        if opt.backbone == "resnet":
+            SAT_DESC_HEIGHT = 8
+            SAT_DESC_WIDTH = 42
     print("SATELLITE_IMG_WIDTH:",SATELLITE_IMG_WIDTH)
     print("SATELLITE_IMG_HEIGHT:",SATELLITE_IMG_HEIGHT)
 
     STREET_IMG_WIDTH = 671
     STREET_IMG_HEIGHT = 122
 
-    GRD_DESC_HEIGHT = 7
-    GRD_DESC_WIDTH = 41
-
-    # feature length for each descriptor
-    DESC_LENGTH = 384
+    if opt.backbone == "convnext":
+        GRD_DESC_HEIGHT = 7
+        GRD_DESC_WIDTH = 41
+        # feature length for each descriptor
+        DESC_LENGTH = 384
+    if opt.backbone == "resnet":
+        GRD_DESC_HEIGHT = 8
+        GRD_DESC_WIDTH = 42
+        # feature length for each descriptor
+        DESC_LENGTH = 512
 
     # generate time stamp
     gmt = time.gmtime()
     ts = calendar.timegm(gmt)
 
     if opt.resume_from == 'None':
-        save_name = f"{ts}_{opt.model}_{opt.dataset}_{is_cf}_{polar_transformation}_{opt.save_suffix}"
+        save_name = f"{ts}_{opt.model}_{opt.dataset}_{opt.backbone}_{polar_transformation}_{opt.save_suffix}"
         print("save_name : ", save_name)
         if not os.path.exists(save_name):
             os.makedirs(save_name)
@@ -178,14 +193,28 @@ if __name__ == "__main__":
                             is_mutual=False)
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
-    model = GeoDTR(descriptors=number_descriptors, tr_heads=opt.TR_heads, tr_layers=opt.TR_layers, dropout = opt.dropout, d_hid=opt.TR_dim, is_polar=polar_transformation)
+    model = GeoDTR(descriptors=number_descriptors, \
+                    tr_heads=opt.TR_heads, \
+                    tr_layers=opt.TR_layers, \
+                    dropout = opt.dropout, \
+                    d_hid=opt.TR_dim, \
+                    is_polar=polar_transformation, \
+                    backbone=opt.backbone, \
+                    dataset = opt.dataset)
     embedding_dims = number_descriptors * DESC_LENGTH
 
     model = nn.DataParallel(model)
     model.to(device)
 
+    # for name, param in model.named_parameters():
+    #     if 'backbone' in name:
+    #         print(name)
+    #         param.requires_grad = False
+
     #set optimizer and lr scheduler
 
+    # optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate, weight_decay=opt.weight_decay, eps=1e-6)
+    
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay, eps=1e-6)
     lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
 

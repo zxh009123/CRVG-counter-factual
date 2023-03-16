@@ -4,8 +4,8 @@ import torch.nn.functional as F
 import torchvision.models as models
 import os
 import random
-# from thop import profile
-# from thop import clever_format
+from thop import profile
+from thop import clever_format
 if os.environ["USER"] == "xyli1905":
     from models.TR import TransformerEncoder, TransformerEncoderLayer
 else:
@@ -88,7 +88,7 @@ class ConvNextTiny(nn.Module):
         # print(self.net)
     
     def forward(self, x):
-        return self.net(x) # (B, 768, H/32, W/32)
+        return self.net(x) # (B, 768, H/16, W/16)
 
 class EfficientNetB3(nn.Module):
     def __init__(self):
@@ -108,7 +108,7 @@ class EfficientNetB3(nn.Module):
 class ResNet34(nn.Module):
     def __init__(self):
         super().__init__()
-        net = models.resnet34(pretrained=True)
+        net = models.resnet34(weights='IMAGENET1K_V1')
         layers = list(net.children())[:3]
         layers_end = list(net.children())[4:-2]
 
@@ -135,20 +135,24 @@ class SCGeoLayoutExtractor(nn.Module):
             self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = tr_layers, norm=layer_norm)
             self.pe = LearnablePE(d_model, dropout = dropout, max_len = max_len)
 
-        self.depthwise = nn.Conv2d(d_model, d_model, kernel_size=3, padding=1, groups=d_model) 
-        self.pointwise = nn.Conv2d(d_model, descriptors, kernel_size=1) 
+        # self.depthwise = nn.Conv2d(d_model, d_model, kernel_size=3, padding=1, groups=d_model) 
+        # self.pointwise = nn.Conv2d(d_model, descriptors, kernel_size=1) 
+        self.pointwise = nn.Linear(d_model, descriptors)
 
     def forward(self, x):
         B,C,H,W = x.shape[0], x.shape[1], x.shape[2], x.shape[3]
         x = x.view(B, C, H*W)
-        x = x.permute(0, 2, 1)
+        x = x.permute(0, 2, 1) # B, H*W, C
         if self.tr_layers != 0:
             x = self.pe(x)
             x = self.transformer_encoder(x)
-        x = x.view(B,C,H,W)
-        x = self.pointwise(self.depthwise(x))
-        x = x.view(B,self.descriptors,H*W)
-        x = x.permute(0, 2, 1)
+        # x = x.permute(0, 2, 1) # B, C, H*W
+        # x = x.view(B, C, H, W) # B, C, H, W
+        # x = self.pointwise(x) # B, D, H, W
+        # x = x.view(B, self.descriptors, H*W) # B, D, H*W
+        # x = x.permute(0, 2, 1) # B, H*W, D
+
+        x = self.pointwise(x) # B, H*W, D
         return x
 
 
@@ -194,7 +198,7 @@ class GeoLayoutExtractor(nn.Module):
 
 
 class GeoDTR(nn.Module):
-    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, backbone='convnext'):
+    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, backbone='convnext', dataset = "CVUSA"):
         super().__init__()
 
         # TODO Debug the following code
@@ -202,20 +206,33 @@ class GeoDTR(nn.Module):
             self.backbone_grd = ConvNextTiny()
             self.backbone_sat = ConvNextTiny()
             output_channel = 384
-            grd_feature_size = 287 # 7 * 41
-            if is_polar:
-                sat_feature_size = 287 # 7 * 41
+            if dataset == "CVUSA" or dataset == "CVACT":
+                grd_feature_size = 287 # 7 * 41
+                if is_polar:
+                    sat_feature_size = 287 # 7 * 41
+                else:
+                    sat_feature_size = 256 # 16 * 16
+            elif dataset == "VIGOR" and is_polar == False:
+                grd_feature_size = 800 # 20 * 40
+                sat_feature_size = 400 # 20 * 20
             else:
-                sat_feature_size = 256 # 16 * 16
+                raise RuntimeError(f'The configuration {dataset} and polar:{is_polar} is not correct!')
         elif backbone == 'resnet':
             self.backbone_grd = ResNet34()
             self.backbone_sat = ResNet34()
             output_channel = 512
-            grd_feature_size = 336 # 7 * 41
-            if is_polar:
-                sat_feature_size = 336 # 7 * 41
+
+            if dataset == "CVUSA" or dataset == "CVACT":
+                grd_feature_size = 336 # 7 * 41
+                if is_polar:
+                    sat_feature_size = 336 # 7 * 41
+                else:
+                    sat_feature_size = 256 # 16 * 16
+            elif dataset == "VIGOR" and is_polar == False:
+                grd_feature_size = 800 # 20 * 40
+                sat_feature_size = 400 # 20 * 20
             else:
-                sat_feature_size = 256 # 16 * 16
+                raise RuntimeError(f'The configuration {dataset} and polar:{is_polar} is not correct!')
         else:
             raise RuntimeError(f'backbone: {backbone} is not implemented')
 
@@ -246,15 +263,19 @@ class GeoDTR(nn.Module):
         sat_x = self.backbone_sat(sat)
         grd_x = self.backbone_grd(grd)
 
-        # print("sat_x shape : ", sat_x.shape)
-        # print("grd_x shape : ", grd_x.shape)
+        # print("sat_x shape : ", sat_x.shape) # B, C, H/16, W/16
+        # print("grd_x shape : ", grd_x.shape) # B, C, H/16, W/16
 
         sat_sa = self.GLE_sat(sat_x)
-        grd_sa = self.GLE_grd(grd_x)
-        sat_sa = F.hardtanh(sat_sa)
-        grd_sa = F.hardtanh(grd_sa)
+        grd_sa = self.GLE_grd(grd_x) # B, H*W, D
 
-        sat_x = sat_x.view(b, sat_x.shape[1], sat_x.shape[2]*sat_x.shape[3])
+        sat_sa = F.hardtanh(sat_sa)
+        grd_sa = F.hardtanh(grd_sa) # B, H*W, D
+
+        # sat_sa = F.hardsigmoid(sat_sa)
+        # grd_sa = F.hardsigmoid(grd_sa) # B, H*W, D
+
+        sat_x = sat_x.view(b, sat_x.shape[1], sat_x.shape[2]*sat_x.shape[3]) # B, C, H*W
         grd_x = grd_x.view(b, grd_x.shape[1], grd_x.shape[2]*grd_x.shape[3])
 
         # print("sat_sa shape : ", sat_sa.shape)
@@ -300,8 +321,8 @@ class GeoDTR(nn.Module):
             sat_global = F.normalize(sat_global, p=2, dim=1)
             grd_global = F.normalize(grd_global, p=2, dim=1)
 
-            fake_sat_global = torch.matmul(sat_x, fake_sat_sa).view(b,-1)
-            fake_grd_global = torch.matmul(grd_x, fake_grd_sa).view(b,-1)
+            fake_sat_global = torch.matmul(sat_x, fake_sat_sa).view(b,-1) # B, C*D
+            fake_grd_global = torch.matmul(grd_x, fake_grd_sa).view(b,-1) # B, C*D
 
             fake_sat_global = F.normalize(fake_sat_global, p=2, dim=1)
             fake_grd_global = F.normalize(fake_grd_global, p=2, dim=1)
@@ -318,21 +339,36 @@ class GeoDTR(nn.Module):
             return sat_global, grd_global, sat_sa, grd_sa
 
 if __name__ == "__main__":
-    sat = torch.randn(8, 3, 122, 671)
-    # sat = torch.randn(8, 3, 256, 256)
-    grd = torch.randn(8, 3, 122, 671)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = GeoDTR(descriptors=8, tr_heads=4, tr_layers=2, dropout = 0.3, d_hid=1024, is_polar=True, backbone='convnext')
+    #ACT and USA style
+    # sat = torch.randn(8, 3, 122, 671).to(device)
+    sat = torch.randn(8, 3, 256, 256).to(device)
+    grd = torch.randn(8, 3, 122, 671).to(device)
+
+    # VIGOR style
+    # sat = torch.randn(32, 3, 320, 320).to(device)
+    # grd = torch.randn(32, 3, 320, 640).to(device)
+
+    model = GeoDTR(descriptors=4, \
+        tr_heads=4, \
+        tr_layers=2, \
+        dropout = 0.3, \
+        d_hid=512, \
+        is_polar=False, \
+        backbone='convnext', \
+        dataset='CVUSA')
+    model = model.to(device)
     result = model(sat, grd, True)
 
     for i in result:
         print(i.shape)
 
-    # macs, params = profile(model, inputs=(sat, grd, False, ))
-    # macs, params = clever_format([macs, params], "%.3f")
+    macs, params = profile(model, inputs=(sat, grd, False, ))
+    macs, params = clever_format([macs, params], "%.3f")
 
-    # print(macs)
-    # print(params)
+    print(macs)
+    print(params)
 
     # net = SCGeoLayoutExtractor(\
     #     max_len=768, 
