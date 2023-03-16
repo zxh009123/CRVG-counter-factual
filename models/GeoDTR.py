@@ -146,13 +146,13 @@ class SCGeoLayoutExtractor(nn.Module):
         if self.tr_layers != 0:
             x = self.pe(x)
             x = self.transformer_encoder(x)
-        # x = x.permute(0, 2, 1) # B, C, H*W
-        # x = x.view(B, C, H, W) # B, C, H, W
-        # x = self.pointwise(x) # B, D, H, W
-        # x = x.view(B, self.descriptors, H*W) # B, D, H*W
-        # x = x.permute(0, 2, 1) # B, H*W, D
+        x = x.permute(0, 2, 1) # B, C, H*W
+        x = x.view(B, C, H, W) # B, C, H, W
+        x = self.pointwise(x) # B, D, H, W
+        x = x.view(B, self.descriptors, H*W) # B, D, H*W
+        x = x.permute(0, 2, 1) # B, H*W, D
 
-        x = self.pointwise(x) # B, H*W, D
+        # x = self.pointwise(x) # B, H*W, D
         return x
 
 
