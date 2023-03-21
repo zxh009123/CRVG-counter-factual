@@ -130,30 +130,73 @@ class SCGeoLayoutExtractor(nn.Module):
         self.descriptors = descriptors
 
         if self.tr_layers != 0:
+            # generate D later
             encoder_layers = TransformerEncoderLayer(d_model, tr_heads, d_hid, dropout, activation='gelu', batch_first=True)
             layer_norm = nn.LayerNorm(d_model)
             self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = tr_layers, norm=layer_norm)
             self.pe = LearnablePE(d_model, dropout = dropout, max_len = max_len)
 
+            # generate D before
+            # hidden_size = int(descriptors / 2)
+            # encoder_layers = TransformerEncoderLayer(descriptors, tr_heads, hidden_size, dropout, activation='gelu', batch_first=True)
+            # layer_norm = nn.LayerNorm(descriptors)
+            # self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = tr_layers, norm=layer_norm)
+            # self.pe = LearnablePE(descriptors, dropout = dropout, max_len = max_len)
+
+        # generate D later
         # self.depthwise = nn.Conv2d(d_model, d_model, kernel_size=3, padding=1, groups=d_model) 
         # self.pointwise = nn.Conv2d(d_model, descriptors, kernel_size=1) 
         self.pointwise = nn.Linear(d_model, descriptors)
 
+        hid_dim = int(max_len / 2.0)
+        self.w1, self.b1 = self.init_weights_(max_len, hid_dim, descriptors)
+        self.w2, self.b2 = self.init_weights_(hid_dim, max_len, descriptors)
+
+        # generate D before
+        # self.pointwise = nn.Linear(d_model, descriptors)
+
+    def init_weights_(self, din, dout, dnum):
+        # weight = torch.empty(din, dout, dnum)
+        weight = torch.empty(din, dnum, dout)
+        nn.init.normal_(weight, mean=0.0, std=0.005)
+        # bias = torch.empty(1, dout, dnum)
+        bias = torch.empty(1, dnum, dout)
+        nn.init.constant_(bias, val=0.1)
+        weight = torch.nn.Parameter(weight)
+        bias = torch.nn.Parameter(bias)
+        return weight, bias
+
     def forward(self, x):
         B,C,H,W = x.shape[0], x.shape[1], x.shape[2], x.shape[3]
+
+        # generate D later
         x = x.view(B, C, H*W)
         x = x.permute(0, 2, 1) # B, H*W, C
         if self.tr_layers != 0:
             x = self.pe(x)
-            x = self.transformer_encoder(x)
-        x = x.permute(0, 2, 1) # B, C, H*W
-        x = x.view(B, C, H, W) # B, C, H, W
-        x = self.pointwise(x) # B, D, H, W
-        x = x.view(B, self.descriptors, H*W) # B, D, H*W
-        x = x.permute(0, 2, 1) # B, H*W, D
+            x = self.transformer_encoder(x) # B, H*W, C
+
+        x = self.pointwise(x) # B, H*W, K
+
+        x = torch.einsum('bdj, jdi -> bji', x, self.w1) + self.b1
+        x = torch.einsum('bji, dji -> bdj', x, self.w2) + self.b2
+
+        # x = F.hardtanh(x) # B, H*W, D
+        x = F.sigmoid(x) # B, H*W, D
+        return x
+
+
+        # # generate D Before
+        # x = x.view(B, C, H*W)
+        # x = x.permute(0, 2, 1) # B, H*W, C
 
         # x = self.pointwise(x) # B, H*W, D
-        return x
+
+        # if self.tr_layers != 0:
+        #     x = self.pe(x)
+        #     x = self.transformer_encoder(x) # B, H*W, D
+
+        # return x
 
 
 class GeoLayoutExtractor(nn.Module):
@@ -268,12 +311,6 @@ class GeoDTR(nn.Module):
 
         sat_sa = self.GLE_sat(sat_x)
         grd_sa = self.GLE_grd(grd_x) # B, H*W, D
-
-        sat_sa = F.hardtanh(sat_sa)
-        grd_sa = F.hardtanh(grd_sa) # B, H*W, D
-
-        # sat_sa = F.hardsigmoid(sat_sa)
-        # grd_sa = F.hardsigmoid(grd_sa) # B, H*W, D
 
         sat_x = sat_x.view(b, sat_x.shape[1], sat_x.shape[2]*sat_x.shape[3]) # B, C, H*W
         grd_x = grd_x.view(b, grd_x.shape[1], grd_x.shape[2]*grd_x.shape[3])

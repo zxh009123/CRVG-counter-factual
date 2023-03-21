@@ -80,7 +80,12 @@ if __name__ == "__main__":
     STREET_IMG_WIDTH = 671
     STREET_IMG_HEIGHT = 122
 
-    DESC_LENGTH = 384
+    if opt.backbone == "convnext":
+        # feature length for each descriptor
+        DESC_LENGTH = 384
+    if opt.backbone == "resnet":
+        # feature length for each descriptor
+        DESC_LENGTH = 512
 
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

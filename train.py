@@ -308,7 +308,7 @@ if __name__ == "__main__":
 
                 sat_mutual_loss = torch.nn.functional.smooth_l1_loss(reversed_sat_desc_second, sat_desc_first)
                 grd_mutual_loss = torch.nn.functional.smooth_l1_loss(reversed_grd_desc_second, grd_desc_first)
-                mutual_loss = sat_mutual_loss + grd_mutual_loss
+                mutual_loss = (sat_mutual_loss + grd_mutual_loss) / 2.0
                 loss += mutual_loss
 
                 epoch_mutual_loss += mutual_loss.item()
