@@ -157,7 +157,7 @@ class SCGeoLayoutExtractor(nn.Module):
 
     def init_weights_(self, din, dout, dnum):
         # weight = torch.empty(din, dout, dnum)
-        weight = torch.empty(din, dnum, dout)
+        weight = torch.empty(dnum, din, dout)
         nn.init.normal_(weight, mean=0.0, std=0.005)
         # bias = torch.empty(1, dout, dnum)
         bias = torch.empty(1, dnum, dout)
@@ -177,12 +177,17 @@ class SCGeoLayoutExtractor(nn.Module):
             x = self.transformer_encoder(x) # B, H*W, C
 
         x = self.pointwise(x) # B, H*W, K
+        # print(self.w2.shape)
+        # print(self.b2.shape)
 
         x = torch.einsum('bdj, jdi -> bji', x, self.w1) + self.b1
-        x = torch.einsum('bji, dji -> bdj', x, self.w2) + self.b2
+        # print(x.shape)
+        x = torch.einsum('bji, jid -> bjd', x, self.w2) + self.b2
+
+        x = x.permute(0,2,1)
 
         # x = F.hardtanh(x) # B, H*W, D
-        x = F.sigmoid(x) # B, H*W, D
+        x = torch.sigmoid(x) # B, H*W, D
         return x
 
 
@@ -223,6 +228,7 @@ class GeoLayoutExtractor(nn.Module):
         return weight, bias
 
     def forward(self, x):
+        x = x.view(x.shape[0], x.shape[1], -1)
         channel = x.shape[1]
         mask, pos = x.max(1)
 
@@ -235,6 +241,7 @@ class GeoLayoutExtractor(nn.Module):
 
         mask = torch.einsum('bdj, jdi -> bdi', mask, self.w2) + self.b2
         mask = mask.permute(0,2,1)
+        mask = F.hardtanh(mask)
 
         return mask
 
@@ -266,9 +273,9 @@ class GeoDTR(nn.Module):
             output_channel = 512
 
             if dataset == "CVUSA" or dataset == "CVACT":
-                grd_feature_size = 336 # 7 * 41
+                grd_feature_size = 336 # 8 * 42
                 if is_polar:
-                    sat_feature_size = 336 # 7 * 41
+                    sat_feature_size = 336 # 8 * 42
                 else:
                     sat_feature_size = 256 # 16 * 16
             elif dataset == "VIGOR" and is_polar == False:
@@ -279,8 +286,7 @@ class GeoDTR(nn.Module):
         else:
             raise RuntimeError(f'backbone: {backbone} is not implemented')
 
-        # Here 768 is fixed to backbone ouput channel
-        # d_model is fixed to backbone output H*W
+
         self.GLE_grd = SCGeoLayoutExtractor(\
                         max_len=grd_feature_size, 
                         d_model=output_channel, \
@@ -298,6 +304,15 @@ class GeoDTR(nn.Module):
                         tr_layers=tr_layers, \
                         dropout = dropout, \
                         d_hid=d_hid)
+
+        # self.GLE_grd = GeoLayoutExtractor(grd_feature_size, \
+        #     descriptors=8, tr_heads=4, \
+        #     tr_layers=2, dropout = 0.3,\
+        #     d_hid=2048)
+        # self.GLE_sat = GeoLayoutExtractor(sat_feature_size, \
+        #     descriptors=8, tr_heads=4, \
+        #     tr_layers=2, dropout = 0.3,\
+        #     d_hid=2048)
 
 
     def forward(self, sat, grd, is_cf):
@@ -349,8 +364,13 @@ class GeoDTR(nn.Module):
             # fake_sat_sa = torch.cat([lower_half_sat, upper_half_sat], dim=0)
             # fake_grd_sa = torch.cat([lower_half_grd, upper_half_grd], dim=0)
 
-            fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1.0, 1.0)
-            fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1.0, 1.0)
+            # Old implementation for hardTanh
+            # fake_sat_sa = torch.zeros_like(sat_sa).uniform_(-1.0, 1.0)
+            # fake_grd_sa = torch.zeros_like(grd_sa).uniform_(-1.0, 1.0)
+            
+            # New implementation for Sigmoid
+            fake_sat_sa = torch.zeros_like(sat_sa).uniform_(0.0, 1.0)
+            fake_grd_sa = torch.zeros_like(grd_sa).uniform_(0.0, 1.0)
 
             sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
             grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
@@ -393,7 +413,7 @@ if __name__ == "__main__":
         dropout = 0.3, \
         d_hid=512, \
         is_polar=False, \
-        backbone='convnext', \
+        backbone='resnet', \
         dataset='CVUSA')
     model = model.to(device)
     result = model(sat, grd, True)

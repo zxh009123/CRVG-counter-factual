@@ -87,7 +87,7 @@ if __name__ == "__main__":
 
 
     batch_size = opt.batch_size
-    number_of_epoch = opt.epochs
+    number_of_epoch = opt.epochs + 1
     learning_rate = opt.lr
     number_descriptors = opt.descriptors
     gamma = opt.gamma
@@ -216,10 +216,10 @@ if __name__ == "__main__":
     # optimizer = torch.optim.AdamW(filter(lambda p: p.requires_grad, model.parameters()), lr=learning_rate, weight_decay=opt.weight_decay, eps=1e-6)
     
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=opt.weight_decay, eps=1e-6)
-    lrSchedule = WarmupCosineSchedule(optimizer, 5, number_of_epoch)
+    lrSchedule = WarmupCosineSchedule(optimizer, 5, opt.epochs)
 
 
-    start_epoch = 0
+    start_epoch = 1
     if opt.resume_from != "None":
         logger.info("loading checkpoint...")
         model_path = os.path.join(opt.resume_from, "epoch_last", "epoch_last.pth")
