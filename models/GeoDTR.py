@@ -123,8 +123,15 @@ class ResNet34(nn.Module):
         return self.layers(x)
 
 class SCGeoLayoutExtractor(nn.Module):
-    def __init__(self, max_len=60, d_model=768, descriptors=8, tr_heads=4, tr_layers=6, dropout = 0.3, d_hid=2048):
+    def __init__(
+        self, 
+        max_len=60, d_model=768, descriptors=8, tr_heads=4, tr_layers=6, dropout = 0.3, d_hid=2048,
+        normalize = False, orthogonalize = False, bottleneck = False
+    ):
         super().__init__()
+        self.normalize = normalize
+        self.orthogonalize = orthogonalize
+        self.bottleneck = bottleneck
         self.tr_layers = tr_layers
 
         self.descriptors = descriptors
@@ -173,13 +180,22 @@ class SCGeoLayoutExtractor(nn.Module):
         # print(self.w2.shape)
         # print(self.b2.shape)
 
-        x = torch.einsum('bdj, jdi -> bji', x, self.w1) + self.b1
-        # print(x.shape)
-        x = torch.einsum('bji, jid -> bjd', x, self.w2) + self.b2
+        if self.bottleneck:
+            x = torch.einsum('bdj, jdi -> bji', x, self.w1) + self.b1
+            # print(x.shape)
+            x = torch.einsum('bji, jid -> bjd', x, self.w2) + self.b2
 
-        x = x.permute(0,2,1)
+            x = x.permute(0,2,1) #NOTE also B, H*W, K
 
-        x = torch.sigmoid(x) # B, H*W, K
+        if self.normalize:
+            if self.orthogonalize:
+                x, _ = torch.linalg.qr(x, mode="reduced") # use q, of dim (B, H*W, K), already normalized
+            else:
+                x = F.normalize(x, p=2.0, dim=1) # of dim (B, H*W, K); normalized but generally not orthogonalized
+        else:
+            # x = F.hardtanh(x) # B, H*W, D
+            x = torch.sigmoid(x) # B, H*W, D
+
         return x
 
         # Up/Down sample before
@@ -240,16 +256,23 @@ class GeoLayoutExtractor(nn.Module):
             mask = self.tr_module(mask, pos_normalized)
 
         mask = torch.einsum('bdj, jdi -> bdi', mask, self.w2) + self.b2
-        mask = mask.permute(0,2,1)
-        mask = F.hardtanh(mask)
+        mask = mask.permute(0,2,1) # B, H*W, D
+        # lxy20230327 test normalized descriptor
+        # mask = F.hardtanh(mask)
+        mask = F.softmax(mask, dim=1) #now it a projection rather than a mask
 
         return mask
 
 
 
 class GeoDTR(nn.Module):
-    def __init__(self, descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, backbone='convnext', dataset = "CVUSA"):
+    def __init__(
+        self, 
+        descriptors = 16, tr_heads=8, tr_layers=6, dropout = 0.3, d_hid=2048, is_polar=True, backbone='convnext', dataset = "CVUSA",
+        normalize = False, orthogonalize = False, bottleneck = False
+    ):
         super().__init__()
+        self.normalize = normalize
 
         # TODO Debug the following code
         if backbone == 'convnext':
@@ -286,24 +309,29 @@ class GeoDTR(nn.Module):
         else:
             raise RuntimeError(f'backbone: {backbone} is not implemented')
 
-
-        self.GLE_grd = SCGeoLayoutExtractor(\
-                        max_len=grd_feature_size, 
-                        d_model=output_channel, \
-                        descriptors=descriptors, \
-                        tr_heads=tr_heads, \
-                        tr_layers=tr_layers, \
-                        dropout = dropout, \
-                        d_hid=d_hid)
+        self.GLE_grd = SCGeoLayoutExtractor(
+                        max_len = grd_feature_size, 
+                        d_model = output_channel, 
+                        descriptors = descriptors, 
+                        tr_heads = tr_heads, 
+                        tr_layers = tr_layers, 
+                        dropout = dropout, 
+                        d_hid = d_hid,
+                        normalize = normalize,
+                        orthogonalize = orthogonalize, 
+                        bottleneck = bottleneck)
         
-        self.GLE_sat = SCGeoLayoutExtractor(\
-                        max_len=sat_feature_size, 
-                        d_model=output_channel, \
-                        descriptors=descriptors, \
-                        tr_heads=tr_heads, \
-                        tr_layers=tr_layers, \
-                        dropout = dropout, \
-                        d_hid=d_hid)
+        self.GLE_sat = SCGeoLayoutExtractor(
+                        max_len = sat_feature_size, 
+                        d_model = output_channel, 
+                        descriptors = descriptors, 
+                        tr_heads = tr_heads, 
+                        tr_layers = tr_layers, 
+                        dropout = dropout, 
+                        d_hid = d_hid, 
+                        normalize = normalize,
+                        orthogonalize = orthogonalize, 
+                        bottleneck = bottleneck)
 
         # self.GLE_grd = GeoLayoutExtractor(grd_feature_size, \
         #     descriptors=8, tr_heads=4, \
@@ -371,6 +399,9 @@ class GeoDTR(nn.Module):
             # New implementation for Sigmoid
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(0.0, 1.0)
             fake_grd_sa = torch.zeros_like(grd_sa).uniform_(0.0, 1.0)
+            if self.normalize:
+                fake_sat_sa = F.normalize(fake_sat_sa, p=2, dim=1)
+                fake_grd_sa = F.normalize(fake_grd_sa, p=2, dim=1)
 
             sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
             grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
