@@ -39,7 +39,7 @@ def GetBestModel(path):
     return os.path.join('epoch_'+str(best_epoch), 'trans_'+str(best_epoch)+'.pth')
 
 if __name__ == "__main__":
-    os.environ["CUDA_VISIBLE_DEVICES"]="0,1"
+    os.environ["CUDA_VISIBLE_DEVICES"]="2,3"
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--epochs", type=int, default=200, help="number of epochs of training")
@@ -63,6 +63,10 @@ if __name__ == "__main__":
     parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength')
     parser.add_argument('--mutual', default=False, action='store_true', help='no mutual learning')
     parser.add_argument('--backbone', type=str, default='resnet', help='backbone selection')
+
+    parser.add_argument('--normalize', default=False, action='store_true', help='whether normalize descriptors')
+    parser.add_argument('--orthogonalize', default=False, action='store_true', help='whether orthogonalize descriptors')
+    parser.add_argument('--bottleneck', default=False, action='store_true', help='whether use bottleneck for descriptors')
 
 
     opt = parser.parse_args()
@@ -193,14 +197,17 @@ if __name__ == "__main__":
                             is_mutual=False)
         validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
 
-    model = GeoDTR(descriptors=number_descriptors, \
-                    tr_heads=opt.TR_heads, \
-                    tr_layers=opt.TR_layers, \
-                    dropout = opt.dropout, \
-                    d_hid=opt.TR_dim, \
-                    is_polar=polar_transformation, \
-                    backbone=opt.backbone, \
-                    dataset = opt.dataset)
+    model = GeoDTR(descriptors=number_descriptors,
+                    tr_heads=opt.TR_heads,
+                    tr_layers=opt.TR_layers,
+                    dropout = opt.dropout,
+                    d_hid=opt.TR_dim,
+                    is_polar=polar_transformation,
+                    backbone=opt.backbone,
+                    dataset = opt.dataset,
+                    normalize = opt.normalize,
+                    orthogonalize = opt.orthogonalize, 
+                    bottleneck = opt.bottleneck)
     embedding_dims = number_descriptors * DESC_LENGTH
 
     model = nn.DataParallel(model)
