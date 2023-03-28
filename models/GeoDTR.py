@@ -271,6 +271,7 @@ class GeoDTR(nn.Module):
         normalize = False, orthogonalize = False, bottleneck = False
     ):
         super().__init__()
+        self.normalize = normalize
 
         # TODO Debug the following code
         if backbone == 'convnext':
@@ -397,6 +398,9 @@ class GeoDTR(nn.Module):
             # New implementation for Sigmoid
             fake_sat_sa = torch.zeros_like(sat_sa).uniform_(0.0, 1.0)
             fake_grd_sa = torch.zeros_like(grd_sa).uniform_(0.0, 1.0)
+            if self.normalize:
+                fake_sat_sa = F.normalize(fake_sat_sa, p=2, dim=1)
+                fake_grd_sa = F.normalize(fake_grd_sa, p=2, dim=1)
 
             sat_global = torch.matmul(sat_x, sat_sa).view(b,-1)
             grd_global = torch.matmul(grd_x, grd_sa).view(b,-1)
