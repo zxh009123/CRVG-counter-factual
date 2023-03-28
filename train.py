@@ -292,6 +292,8 @@ if __name__ == "__main__":
 
             # mutual loss
             if opt.mutual:
+                # pass
+                
                 grd_desc = grd_desc.reshape((grd_desc.shape[0], GRD_DESC_HEIGHT, GRD_DESC_WIDTH, opt.descriptors))
                 sat_desc = sat_desc.reshape((sat_desc.shape[0], SAT_DESC_HEIGHT, SAT_DESC_WIDTH, opt.descriptors))
 

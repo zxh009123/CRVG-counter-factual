@@ -130,30 +130,23 @@ class SCGeoLayoutExtractor(nn.Module):
         self.descriptors = descriptors
 
         if self.tr_layers != 0:
-            # generate D later
+            # Up/Down sample later
             encoder_layers = TransformerEncoderLayer(d_model, tr_heads, d_hid, dropout, activation='gelu', batch_first=True)
             layer_norm = nn.LayerNorm(d_model)
             self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = tr_layers, norm=layer_norm)
             self.pe = LearnablePE(d_model, dropout = dropout, max_len = max_len)
 
-            # generate D before
-            # hidden_size = int(descriptors / 2)
-            # encoder_layers = TransformerEncoderLayer(descriptors, tr_heads, hidden_size, dropout, activation='gelu', batch_first=True)
+            # Up/Down sample before
+            # encoder_layers = TransformerEncoderLayer(descriptors, tr_heads, d_hid, dropout, activation='gelu', batch_first=True)
             # layer_norm = nn.LayerNorm(descriptors)
             # self.transformer_encoder = TransformerEncoder(encoder_layer = encoder_layers, num_layers = tr_layers, norm=layer_norm)
             # self.pe = LearnablePE(descriptors, dropout = dropout, max_len = max_len)
 
-        # generate D later
-        # self.depthwise = nn.Conv2d(d_model, d_model, kernel_size=3, padding=1, groups=d_model) 
-        # self.pointwise = nn.Conv2d(d_model, descriptors, kernel_size=1) 
         self.pointwise = nn.Linear(d_model, descriptors)
 
         hid_dim = int(max_len / 2.0)
         self.w1, self.b1 = self.init_weights_(max_len, hid_dim, descriptors)
         self.w2, self.b2 = self.init_weights_(hid_dim, max_len, descriptors)
-
-        # generate D before
-        # self.pointwise = nn.Linear(d_model, descriptors)
 
     def init_weights_(self, din, dout, dnum):
         # weight = torch.empty(din, dout, dnum)
@@ -169,7 +162,7 @@ class SCGeoLayoutExtractor(nn.Module):
     def forward(self, x):
         B,C,H,W = x.shape[0], x.shape[1], x.shape[2], x.shape[3]
 
-        # generate D later
+        # Up/Down sample later
         x = x.view(B, C, H*W)
         x = x.permute(0, 2, 1) # B, H*W, C
         if self.tr_layers != 0:
@@ -186,21 +179,28 @@ class SCGeoLayoutExtractor(nn.Module):
 
         x = x.permute(0,2,1)
 
-        # x = F.hardtanh(x) # B, H*W, D
-        x = torch.sigmoid(x) # B, H*W, D
+        x = torch.sigmoid(x) # B, H*W, K
         return x
 
-
-        # # generate D Before
+        # Up/Down sample before
         # x = x.view(B, C, H*W)
         # x = x.permute(0, 2, 1) # B, H*W, C
 
-        # x = self.pointwise(x) # B, H*W, D
+        # x = self.pointwise(x) # B, H*W, K
+        # # print(self.w2.shape)
+        # # print(self.b2.shape)
+
+        # x = torch.einsum('bdj, jdi -> bji', x, self.w1) + self.b1
+        # # print(x.shape)
+        # x = torch.einsum('bji, jid -> bjd', x, self.w2) + self.b2
+
+        # x = x.permute(0,2,1) # B, H*W, K
 
         # if self.tr_layers != 0:
         #     x = self.pe(x)
-        #     x = self.transformer_encoder(x) # B, H*W, D
+        #     x = self.transformer_encoder(x) # B, H*W, K
 
+        # x = torch.sigmoid(x) # B, H*W, K
         # return x
 
 
@@ -399,8 +399,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     #ACT and USA style
-    # sat = torch.randn(8, 3, 122, 671).to(device)
-    sat = torch.randn(8, 3, 256, 256).to(device)
+    sat = torch.randn(8, 3, 122, 671).to(device)
+    # sat = torch.randn(8, 3, 256, 256).to(device)
     grd = torch.randn(8, 3, 122, 671).to(device)
 
     # VIGOR style
@@ -412,8 +412,8 @@ if __name__ == "__main__":
         tr_layers=2, \
         dropout = 0.3, \
         d_hid=512, \
-        is_polar=False, \
-        backbone='resnet', \
+        is_polar=True, \
+        backbone='convnext', \
         dataset='CVUSA')
     model = model.to(device)
     result = model(sat, grd, True)
