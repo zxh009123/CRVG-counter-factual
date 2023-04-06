@@ -25,7 +25,7 @@ from models.GeoDTR import GeoDTR
 
 from utils.utils import softMarginTripletLoss,\
      CFLoss, save_model, WarmupCosineSchedule, ReadConfig,\
-     validatenp, SaveDescriptors
+     validateVIGOR, SaveDescriptors
 
 args_do_not_overide = ['verbose', 'resume_from']
 backbone_lists = ['resnet', 'convnext']
@@ -47,7 +47,6 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-4, help="learning rate")
     parser.add_argument("--save_suffix", type=str, default='_aug_strong', help='name of the model at the end')
     parser.add_argument("--data_dir", type=str, default='../scratch', help='dir to the dataset')
-    parser.add_argument('--dataset', default='CVUSA', choices=['CVUSA', 'CVACT'], help='which dataset to use') 
     parser.add_argument("--descriptors", type=int, default=8, help='number of descriptors')
     parser.add_argument("--TR_heads", type=int, default=4, help='number of heads in Transformer')
     parser.add_argument("--TR_layers", type=int, default=2, help='number of layers in Transformer')
@@ -57,7 +56,6 @@ if __name__ == "__main__":
     parser.add_argument("--weight_decay", type=float, default=0.03, help='weight decay value for optimizer')
     parser.add_argument('--cf', default=False, action='store_true', help='counter factual loss')
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
-    parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
     parser.add_argument('--geo_aug', default='strong', choices=['strong', 'weak', 'none'], help='geometric augmentation strength') 
     parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength')
@@ -104,36 +102,27 @@ if __name__ == "__main__":
         print(f"{k} : {v}")
 
     
-    if opt.no_polar:
-        SATELLITE_IMG_WIDTH = 256
-        SATELLITE_IMG_HEIGHT = 256
-        polar_transformation = False
-        SAT_DESC_HEIGHT = 16
-        SAT_DESC_WIDTH = 16
-    else:
-        SATELLITE_IMG_WIDTH = 671
-        SATELLITE_IMG_HEIGHT = 122
-        polar_transformation = True
-        if opt.backbone == "convnext":
-            SAT_DESC_HEIGHT = 7
-            SAT_DESC_WIDTH = 41
-        if opt.backbone == "resnet":
-            SAT_DESC_HEIGHT = 8
-            SAT_DESC_WIDTH = 42
+
+    SATELLITE_IMG_WIDTH = 320
+    SATELLITE_IMG_HEIGHT = 320
+    polar_transformation = False
+    SAT_DESC_HEIGHT = 20
+    SAT_DESC_WIDTH = 20
+
     print("SATELLITE_IMG_WIDTH:",SATELLITE_IMG_WIDTH)
     print("SATELLITE_IMG_HEIGHT:",SATELLITE_IMG_HEIGHT)
 
-    STREET_IMG_WIDTH = 671
-    STREET_IMG_HEIGHT = 122
+    STREET_IMG_WIDTH = 640
+    STREET_IMG_HEIGHT = 320
 
     if opt.backbone == "convnext":
-        GRD_DESC_HEIGHT = 7
-        GRD_DESC_WIDTH = 41
+        GRD_DESC_HEIGHT = 20
+        GRD_DESC_WIDTH = 40
         # feature length for each descriptor
         DESC_LENGTH = 384
     if opt.backbone == "resnet":
-        GRD_DESC_HEIGHT = 8
-        GRD_DESC_WIDTH = 42
+        GRD_DESC_HEIGHT = 20
+        GRD_DESC_WIDTH = 40
         # feature length for each descriptor
         DESC_LENGTH = 512
 
@@ -142,7 +131,7 @@ if __name__ == "__main__":
     ts = calendar.timegm(gmt)
 
     if opt.resume_from == 'None':
-        save_name = f"{ts}_{opt.model}_{opt.dataset}_{opt.backbone}_{polar_transformation}_{opt.save_suffix}"
+        save_name = f"{ts}_{opt.model}_vigor_{opt.backbone}_{polar_transformation}_{opt.save_suffix}"
         print("save_name : ", save_name)
         if not os.path.exists(save_name):
             os.makedirs(save_name)
@@ -159,43 +148,15 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    
+    train_dataset = VIGOR(mode="train",root = opt.data_dir, same_area=True, print_bool=False)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
 
-    if opt.dataset == "CVUSA":
+    val_reference = VIGOR(mode="test_reference",root = opt.data_dir, same_area=True, print_bool=False)
+    val_reference_loader = DataLoader(val_reference, batch_size=batch_size, shuffle=True, num_workers=8)
 
-        dataloader = DataLoader(USADataset(data_dir = opt.data_dir, \
-                                geometric_aug=opt.geo_aug, \
-                                sematic_aug=opt.sem_aug, mode='train', \
-                                is_polar=polar_transformation, \
-                                is_mutual=opt.mutual),\
-                                batch_size=batch_size, shuffle=True, num_workers=8)
-
-        validateloader = DataLoader(USADataset(data_dir = opt.data_dir, \
-                                    geometric_aug='none', \
-                                    sematic_aug='none', \
-                                    mode='val', \
-                                    is_polar=polar_transformation, \
-                                    is_mutual=False),\
-            batch_size=batch_size, shuffle=False, num_workers=8)
-
-
-    elif opt.dataset == "CVACT":
-        #train
-        train_dataset = ACTDataset(data_dir = opt.data_dir, \
-                        geometric_aug=opt.geo_aug, \
-                        sematic_aug=opt.sem_aug, \
-                        is_polar=polar_transformation, \
-                        mode='train', \
-                        is_mutual=opt.mutual)
-        dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
-
-        #val
-        validate_dataset = ACTDataset(data_dir = opt.data_dir, \
-                            geometric_aug='none', \
-                            sematic_aug='none', \
-                            is_polar=polar_transformation, \
-                            mode='val', \
-                            is_mutual=False)
-        validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+    val_query = VIGOR(mode="test_query",root = opt.data_dir, same_area=True, print_bool=False)
+    val_query_loader = DataLoader(val_query, batch_size=batch_size, shuffle=True, num_workers=8)
 
     model = GeoDTR(descriptors=number_descriptors,
                     tr_heads=opt.TR_heads,
@@ -204,7 +165,7 @@ if __name__ == "__main__":
                     d_hid=opt.TR_dim,
                     is_polar=polar_transformation,
                     backbone=opt.backbone,
-                    dataset = opt.dataset,
+                    dataset = "VIGOR",
                     normalize = opt.normalize,
                     orthogonalize = opt.orthogonalize, 
                     bottleneck = opt.bottleneck)
@@ -245,39 +206,24 @@ if __name__ == "__main__":
         epoch_triplet_loss = 0
         if is_cf:
             epoch_cf_loss = 0
-        if opt.mutual:
-            epoch_mutual_loss = 0
 
         model.train() # set model to train
-        for batch in tqdm(dataloader, disable = opt.verbose):
+        for batch in tqdm(train_dataloader, disable = opt.verbose):
 
             optimizer.zero_grad()
 
             if opt.mutual:
-                sat_first = batch['satellite_first']
-                grd_first = batch['ground_first']
-                sat_second = batch['satellite_second']
-                grd_second = batch['ground_second']
-                batch_perturb = batch["perturb"]
-
-                # print(sat_first.shape)
-                # print(grd_first.shape)
-                # print(sat_second.shape)
-                # print(grd_second.shape)
+                grd_first = batch[0]
+                grd_second = batch[1]
+                sat_first = batch[2]
+                sat_second = batch[3]
 
                 sat_all = torch.cat((sat_first, sat_second), 0)
                 grd_all = torch.cat((grd_first, grd_second), 0)
 
-                # print(sat_all.shape)
-                # print(grd_all.shape)
-                # print(perturb[0])
-                # print(perturb[1])
-                # print([int(perturb[0][0]), perturb[1][0]])
-                # print([int(perturb[0][1]), perturb[1][1]])
-                # print([int(perturb[0][2]), perturb[1][2]])
             else:
-                sat_all = batch["satellite"]
-                grd_all = batch["ground"]
+                sat_all = batch[2]
+                grd_all = batch[0]
 
             if is_cf:
                 sat_global, grd_global, fake_sat_global, fake_grd_global, sat_desc, grd_desc = model(sat_all, grd_all, is_cf)
@@ -296,31 +242,6 @@ if __name__ == "__main__":
                 CFLoss_total = (CFLoss_sat + CFLoss_grd) / 2.0
                 loss += CFLoss_total
                 epoch_cf_loss += CFLoss_total.item()
-
-            # mutual loss
-            if opt.mutual:
-                pass
-                
-                # grd_desc = grd_desc.reshape((grd_desc.shape[0], GRD_DESC_HEIGHT, GRD_DESC_WIDTH, opt.descriptors))
-                # sat_desc = sat_desc.reshape((sat_desc.shape[0], SAT_DESC_HEIGHT, SAT_DESC_WIDTH, opt.descriptors))
-
-                # # split into first and second half
-                # grd_desc_first, grd_desc_second = torch.tensor_split(grd_desc, 2)
-                # sat_desc_first, sat_desc_second = torch.tensor_split(sat_desc, 2)
-
-                # #reverse second half
-                # perturb = [[int(batch_perturb[0][i]), batch_perturb[1][i]] for i in range(len(batch_perturb[1]))]
-                # reversed_sat_desc_second, reversed_grd_desc_second = Reverse_Rotate_Flip(sat_desc_second, grd_desc_second, perturb, not opt.no_polar)
-
-                # # print(second_sat.shape)
-                # # print(second_grd.shape)
-
-                # sat_mutual_loss = torch.nn.functional.smooth_l1_loss(reversed_sat_desc_second, sat_desc_first)
-                # grd_mutual_loss = torch.nn.functional.smooth_l1_loss(reversed_grd_desc_second, grd_desc_first)
-                # mutual_loss = (sat_mutual_loss + grd_mutual_loss) / 2.0
-                # loss += mutual_loss
-
-                # epoch_mutual_loss += mutual_loss.item()
 
             loss.backward()
 
@@ -342,47 +263,48 @@ if __name__ == "__main__":
             print(f"Epoch {epoch} CF_Loss: {current_cf_loss}")
             writer.add_scalar('cf_loss', current_cf_loss, epoch)
 
-        if opt.mutual:
-            current_mutual_loss = float(epoch_mutual_loss) / float(len(dataloader))
-            print(f"Epoch {epoch} MUTUAL_Loss: {current_mutual_loss}")
-            writer.add_scalar('mutual_loss', current_mutual_loss, epoch)
-
         print("----------------------")
 
-
-        sat_global_descriptor = np.zeros([8884, embedding_dims])
-        grd_global_descriptor = np.zeros([8884, embedding_dims])
-        val_i = 0
+        #Evaluation
+        sat_global_descriptor = np.zeros([len(val_reference_loader.dataset), embedding_dims])
+        grd_global_descriptor = np.zeros([len(val_query_loader.dataset), embedding_dims])
+        query_labels = np.zeros([len(val_query_loader.dataset)])
 
         model.eval()
         with torch.no_grad():
-            for batch in tqdm(validateloader, disable = opt.verbose):
-                sat = batch['satellite'].to(device)
-                grd = batch['ground'].to(device)
+            for (images, indexes, _) in tqdm(val_reference_loader, disable = opt.verbose):
+                sat = images.to(device)
+                grd = torch.randn(images.shape[0], 3, STREET_IMG_HEIGHT, STREET_IMG_WIDTH).to(device)
 
                 sat_global, grd_global, sat_desc , grd_desc = model(sat, grd, is_cf=False)
 
-                sat_global_descriptor[val_i: val_i + sat_global.shape[0], :] = sat_global.detach().cpu().numpy()
-                grd_global_descriptor[val_i: val_i + grd_global.shape[0], :] = grd_global.detach().cpu().numpy()
+                sat_global_descriptor[indexes.numpy(), :] = sat_global.detach().cpu().numpy()
 
-                val_i += sat_global.shape[0]
+            for (images, indexes, labels) in tqdm(val_query_loader, disable = opt.verbose):
+                sat = torch.randn(images.shape[0], 3, SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH).to(device)
+                grd = images.to(device)
 
-            valAcc = validatenp(sat_global_descriptor, grd_global_descriptor)
+                sat_global, grd_global, sat_desc , grd_desc = model(sat, grd, is_cf=False)
+
+                grd_global_descriptor[indexes.numpy(), :, :] = grd_global.detach().cpu().numpy()
+                query_labels[indexes.numpy()] = labels.numpy()
+
+            valAcc = validateVIGOR(grd_global_descriptor, sat_global_descriptor, query_labels)
             logger.info("validation result")
             print(f"------------------------------------")
             try:
                 #print recall value
-                top1 = valAcc[0, 1]
-                print('top1', ':', valAcc[0, 1] * 100.0)
-                print('top5', ':', valAcc[0, 5] * 100.0)
-                print('top10', ':', valAcc[0, 10] * 100.0)
-                print('top1%', ':', valAcc[0, -1] * 100.0)
+                top1 = valAcc[0]
+                print('top1', ':', valAcc[0] * 100.0)
+                print('top5', ':', valAcc[1] * 100.0)
+                print('top10', ':', valAcc[2] * 100.0)
+                print('top1%', ':', valAcc[-1] * 100.0)
                 # write to tensorboard
                 writer.add_scalars('validation recall@k',{
-                    'top 1':valAcc[0, 1],
-                    'top 5':valAcc[0, 5],
-                    'top 10':valAcc[0, 10],
-                    'top 1%':valAcc[0, -1]
+                    'top 1':valAcc[0],
+                    'top 5':valAcc[1],
+                    'top 10':valAcc[2],
+                    'top 1%':valAcc[-1]
                 }, epoch)
             except:
                 print(valAcc)
