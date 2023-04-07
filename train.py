@@ -250,7 +250,7 @@ if __name__ == "__main__":
 
         model.train() # set model to train
         for batch in tqdm(dataloader, disable = opt.verbose):
-
+            
             optimizer.zero_grad()
 
             if opt.mutual:

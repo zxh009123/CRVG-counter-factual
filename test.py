@@ -97,7 +97,7 @@ if __name__ == "__main__":
     if opt.dataset == 'CVUSA':
         data_path = os.path.join(opt.data_dir, 'CVUSA', 'dataset')
         dataset = USADataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', mode='val', is_polar=polar_transformation, is_mutual=False)
-        validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+        validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
     
     print("number of test samples : ", len(dataset))
 
@@ -108,18 +108,23 @@ if __name__ == "__main__":
                     d_hid=opt.TR_dim, \
                     is_polar=polar_transformation, \
                     backbone=opt.backbone, \
-                    dataset = opt.dataset)
+                    dataset = opt.dataset,
+                    normalize = opt.normalize,
+                    orthogonalize = opt.orthogonalize, 
+                    bottleneck = opt.bottleneck)
     embedding_dims = number_descriptors * DESC_LENGTH
     
     model = nn.DataParallel(model)
     model.to(device)
 
     best_model = GetBestModel(opt.model_path)
-    # best_epoch = '80'
+    # best_epoch = 'last'
     # best_model = os.path.join(opt.model_path, 'epoch_'+str(best_epoch), 'epoch_'+str(best_epoch)+'.pth')
     best_model = os.path.join(opt.model_path, best_model)
     print("loading model : ", best_model)
     model.load_state_dict(torch.load(best_model)['model_state_dict'])
+    # for k,v in torch.load(best_model)['model_state_dict'].items():
+    #     print(k)
 
     num_params = count_parameters(model)
     print(f"model parameters : {num_params}M")

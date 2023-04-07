@@ -11,6 +11,7 @@ from dataset.usa_dataset import USADataset
 #     from dataset.act_dataset_cluster import ACTDataset
 # else:
 from dataset.act_dataset import ACTDataset
+from dataset.vigor_dataset import VIGOR
 from dataset.augmentations import Reverse_Rotate_Flip
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
@@ -61,7 +62,7 @@ if __name__ == "__main__":
     parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength')
     parser.add_argument('--mutual', default=False, action='store_true', help='no mutual learning')
     parser.add_argument('--backbone', type=str, default='resnet', help='backbone selection')
-
+    parser.add_argument('--cross_area', default=False, action='store_true', help='toggle cross-area')
     parser.add_argument('--normalize', default=False, action='store_true', help='whether normalize descriptors')
     parser.add_argument('--orthogonalize', default=False, action='store_true', help='whether orthogonalize descriptors')
     parser.add_argument('--bottleneck', default=False, action='store_true', help='whether use bottleneck for descriptors')
@@ -94,13 +95,13 @@ if __name__ == "__main__":
     number_descriptors = opt.descriptors
     gamma = opt.gamma
     is_cf = opt.cf
+    same_area = not opt.cross_area
 
     hyper_parameter_dict = vars(opt)
     
     logger.info("Configuration:")
     for k, v in hyper_parameter_dict.items():
         print(f"{k} : {v}")
-
     
 
     SATELLITE_IMG_WIDTH = 320
@@ -131,7 +132,7 @@ if __name__ == "__main__":
     ts = calendar.timegm(gmt)
 
     if opt.resume_from == 'None':
-        save_name = f"{ts}_{opt.model}_vigor_{opt.backbone}_{polar_transformation}_{opt.save_suffix}"
+        save_name = f"{ts}_{opt.model}_vigor_{opt.backbone}_{same_area}_{opt.save_suffix}"
         print("save_name : ", save_name)
         if not os.path.exists(save_name):
             os.makedirs(save_name)
@@ -149,14 +150,14 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     
-    train_dataset = VIGOR(mode="train",root = opt.data_dir, same_area=True, print_bool=False)
+    train_dataset = VIGOR(mode="train",root = opt.data_dir, same_area=same_area, print_bool=False)
     train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
 
-    val_reference = VIGOR(mode="test_reference",root = opt.data_dir, same_area=True, print_bool=False)
-    val_reference_loader = DataLoader(val_reference, batch_size=batch_size, shuffle=True, num_workers=8)
+    val_reference = VIGOR(mode="test_reference",root = opt.data_dir, same_area=same_area, print_bool=False)
+    val_reference_loader = DataLoader(val_reference, batch_size=batch_size, shuffle=False, num_workers=8)
 
-    val_query = VIGOR(mode="test_query",root = opt.data_dir, same_area=True, print_bool=False)
-    val_query_loader = DataLoader(val_query, batch_size=batch_size, shuffle=True, num_workers=8)
+    val_query = VIGOR(mode="test_query",root = opt.data_dir, same_area=same_area, print_bool=False)
+    val_query_loader = DataLoader(val_query, batch_size=batch_size, shuffle=False, num_workers=8)
 
     model = GeoDTR(descriptors=number_descriptors,
                     tr_heads=opt.TR_heads,
@@ -255,15 +256,17 @@ if __name__ == "__main__":
         logger.info(f"Summary of epoch {epoch}")
         print(f"===============================================")
         print("---------loss---------")
-        current_triplet_loss = float(epoch_triplet_loss) / float(len(dataloader))
+        current_triplet_loss = float(epoch_triplet_loss) / float(len(train_dataloader))
         print(f"Epoch {epoch} TRI_Loss: {current_triplet_loss}")
         writer.add_scalar('triplet_loss', current_triplet_loss, epoch)
         if is_cf:
-            current_cf_loss = float(epoch_cf_loss) / float(len(dataloader))
+            current_cf_loss = float(epoch_cf_loss) / float(len(train_dataloader))
             print(f"Epoch {epoch} CF_Loss: {current_cf_loss}")
             writer.add_scalar('cf_loss', current_cf_loss, epoch)
 
         print("----------------------")
+        # if epoch % 5 != 0:
+        #     continue
 
         #Evaluation
         sat_global_descriptor = np.zeros([len(val_reference_loader.dataset), embedding_dims])
@@ -273,6 +276,7 @@ if __name__ == "__main__":
         model.eval()
         with torch.no_grad():
             for (images, indexes, _) in tqdm(val_reference_loader, disable = opt.verbose):
+
                 sat = images.to(device)
                 grd = torch.randn(images.shape[0], 3, STREET_IMG_HEIGHT, STREET_IMG_WIDTH).to(device)
 
@@ -286,10 +290,10 @@ if __name__ == "__main__":
 
                 sat_global, grd_global, sat_desc , grd_desc = model(sat, grd, is_cf=False)
 
-                grd_global_descriptor[indexes.numpy(), :, :] = grd_global.detach().cpu().numpy()
+                grd_global_descriptor[indexes.numpy(), :] = grd_global.detach().cpu().numpy()
                 query_labels[indexes.numpy()] = labels.numpy()
 
-            valAcc = validateVIGOR(grd_global_descriptor, sat_global_descriptor, query_labels)
+            valAcc = validateVIGOR(grd_global_descriptor, sat_global_descriptor, query_labels.astype(int))
             logger.info("validation result")
             print(f"------------------------------------")
             try:

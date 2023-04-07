@@ -289,9 +289,9 @@ def validateVIGOR(query_features, reference_features, query_labels, topk=[1,5,10
     results = np.zeros([len(topk)])
     # for CVUSA, CVACT
     if N < 80000:
-        query_features_norm = np.sqrt(np.sum(query_features**2, axis=1, keepdims=True))
-        reference_features_norm = np.sqrt(np.sum(reference_features ** 2, axis=1, keepdims=True))
-        similarity = np.matmul(query_features/query_features_norm, (reference_features/reference_features_norm).transpose())
+        # query_features_norm = np.sqrt(np.sum(query_features**2, axis=1, keepdims=True))
+        # reference_features_norm = np.sqrt(np.sum(reference_features ** 2, axis=1, keepdims=True))
+        similarity = np.matmul(query_features, reference_features.transpose())
 
         for i in range(N):
             ranking = np.sum((similarity[i,:]>similarity[i,query_labels[i]])*1.)
@@ -306,10 +306,9 @@ def validateVIGOR(query_features, reference_features, query_labels, topk=[1,5,10
         for split in range(4):
             query_features_i = query_features[(split*N_4):((split+1)*N_4), :]
             query_labels_i = query_labels[(split*N_4):((split+1)*N_4)]
-            query_features_norm = np.sqrt(np.sum(query_features_i ** 2, axis=1, keepdims=True))
-            reference_features_norm = np.sqrt(np.sum(reference_features ** 2, axis=1, keepdims=True))
-            similarity = np.matmul(query_features_i / query_features_norm,
-                                   (reference_features / reference_features_norm).transpose())
+            # query_features_norm = np.sqrt(np.sum(query_features_i ** 2, axis=1, keepdims=True))
+            # reference_features_norm = np.sqrt(np.sum(reference_features ** 2, axis=1, keepdims=True))
+            similarity = np.matmul(query_features_i, reference_features.transpose())
             for i in range(query_features_i.shape[0]):
                 ranking = np.sum((similarity[i, :] > similarity[i, query_labels_i[i]])*1.)
                 for j, k in enumerate(topk):

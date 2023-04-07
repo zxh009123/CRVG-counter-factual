@@ -4,8 +4,8 @@ import torch.nn.functional as F
 import torchvision.models as models
 import os
 import random
-from thop import profile
-from thop import clever_format
+# from thop import profile
+# from thop import clever_format
 if os.environ["USER"] == "xyli1905":
     from models.TR import TransformerEncoder, TransformerEncoderLayer
 else:
@@ -452,11 +452,11 @@ if __name__ == "__main__":
     for i in result:
         print(i.shape)
 
-    macs, params = profile(model, inputs=(sat, grd, False, ))
-    macs, params = clever_format([macs, params], "%.3f")
+    # macs, params = profile(model, inputs=(sat, grd, False, ))
+    # macs, params = clever_format([macs, params], "%.3f")
 
-    print(macs)
-    print(params)
+    # print(macs)
+    # print(params)
 
     # net = SCGeoLayoutExtractor(\
     #     max_len=768, 

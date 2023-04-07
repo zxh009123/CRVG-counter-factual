@@ -92,7 +92,7 @@ class VIGOR(torch.utils.data.Dataset):
         # else:
         #     self.transform_reference = input_transform(size=self.sat_ori_size)
 
-        self.transform_reference = input_transform(size=self.sat_ori_size, mode=self.mode)
+        self.transform_reference = input_transform(size=self.sat_size, mode=self.mode)
 
         self.to_tensor = transforms.ToTensor()
 
