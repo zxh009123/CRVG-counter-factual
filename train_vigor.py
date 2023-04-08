@@ -265,13 +265,13 @@ if __name__ == "__main__":
             writer.add_scalar('cf_loss', current_cf_loss, epoch)
 
         print("----------------------")
-        # if epoch % 5 != 0:
-        #     continue
+        if epoch % 5 != 0:
+            continue
 
         #Evaluation
-        sat_global_descriptor = np.zeros([len(val_reference_loader.dataset), embedding_dims])
-        grd_global_descriptor = np.zeros([len(val_query_loader.dataset), embedding_dims])
-        query_labels = np.zeros([len(val_query_loader.dataset)])
+        sat_global_descriptor = np.zeros([len(val_reference), embedding_dims])
+        grd_global_descriptor = np.zeros([len(val_query), embedding_dims])
+        query_labels = np.zeros([len(val_query)])
 
         model.eval()
         with torch.no_grad():
@@ -299,10 +299,10 @@ if __name__ == "__main__":
             try:
                 #print recall value
                 top1 = valAcc[0]
-                print('top1', ':', valAcc[0] * 100.0)
-                print('top5', ':', valAcc[1] * 100.0)
-                print('top10', ':', valAcc[2] * 100.0)
-                print('top1%', ':', valAcc[-1] * 100.0)
+                print('top1', ':', valAcc[0])
+                print('top5', ':', valAcc[1])
+                print('top10', ':', valAcc[2])
+                print('top1%', ':', valAcc[-1])
                 # write to tensorboard
                 writer.add_scalars('validation recall@k',{
                     'top 1':valAcc[0],

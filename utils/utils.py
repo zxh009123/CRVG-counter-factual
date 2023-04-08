@@ -315,7 +315,7 @@ def validateVIGOR(query_features, reference_features, query_labels, topk=[1,5,10
                     if ranking < k:
                         results[j] += 1.
 
-    results = results/ query_features.shape[0] * 100.
+    results = (results / N) * 100.
     # print('Percentage-top1:{}, top5:{}, top10:{}, top1%:{}'.format(results[0], results[1], results[2], results[-1]))
     return results
 
