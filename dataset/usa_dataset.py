@@ -77,7 +77,7 @@ class USADataset(Dataset):
         transforms_street = [transforms.Resize((STREET_IMG_HEIGHT, STREET_IMG_WIDTH))]
         transforms_sat = [transforms.Resize((SATELLITE_IMG_HEIGHT, SATELLITE_IMG_WIDTH))]
 
-        if sematic_aug == 'strong':
+        if sematic_aug == 'strong' or sematic_aug == 'same':
             transforms_sat.append(transforms.ColorJitter(0.3, 0.3, 0.3))
             transforms_street.append(transforms.ColorJitter(0.3, 0.3, 0.3))
 
@@ -118,6 +118,7 @@ class USADataset(Dataset):
         self.transforms_street = transforms.Compose(transforms_street)
 
         self.geometric_aug = geometric_aug
+        self.sematic_aug = sematic_aug
 
         if mode == "val" or mode == "dev":
             self.file = os.path.join(self.data_dir, "splits", "val-19zl.csv")
@@ -152,8 +153,12 @@ class USADataset(Dataset):
         satellite_first = self.transforms_sat(satellite)
         ground_first = self.transforms_street(ground)
 
-        satellite_second = self.transforms_sat(satellite)
-        ground_second = self.transforms_street(ground)
+        if self.sematic_aug != 'same':
+            satellite_second = self.transforms_sat(satellite)
+            ground_second = self.transforms_street(ground)
+        else:
+            satellite_second = satellite_first.clone().detach()
+            ground_second = ground_first.clone().detach()
 
         # print(satellite_first.shape)
         # print(ground_first.shape)
@@ -163,7 +168,7 @@ class USADataset(Dataset):
 
 
         # Generate first view
-        if self.geometric_aug == "strong":
+        if self.geometric_aug == "strong" or self.geometric_aug == 'same':
             hflip = random.randint(0,1)
             if hflip == 1:
                 satellite_first, ground_first = HFlip(satellite_first, ground_first)
@@ -193,13 +198,21 @@ class USADataset(Dataset):
             raise RuntimeError(f"geometric augmentation {self.geometric_aug} is not implemented")
 
         if self.is_mutual == False:
-            return {'satellite':satellite_first, 'ground':ground_first}
+            return {'satellite':satellite_first, 
+                    'ground':ground_first}
 
         else:
             # mutual_satellite = satellite.clone().detach()
             # mutual_ground = ground.clone().detach()
 
             # generate new different layout (second view)
+            if self.geometric_aug == 'same' or self.geometric_aug == 'none':
+                return {'satellite_first':satellite_first, 
+                        'ground_first':ground_first,
+                        'satellite_second':satellite_second,
+                        'ground_second':ground_second}
+                
+
             hflip = random.randint(0,1)
             orientation = random.choice(["left", "right", "back", "none"])
 
@@ -245,8 +258,15 @@ if __name__ == "__main__":
     #                 transforms.ToTensor()
     #                 ]
 
-    dataloader = DataLoader(USADataset(data_dir='../scratch/CVUSA/dataset/',geometric_aug='strong', sematic_aug='strong', mode='train', is_polar=True),\
-         batch_size=4, shuffle=True, num_workers=8)
+    dataloader = DataLoader(
+        USADataset(data_dir='../scratch/CVUSA/dataset/', 
+                   geometric_aug='same', 
+                   sematic_aug='strong', 
+                   mode='train', 
+                   is_polar=False),\
+         batch_size=4, 
+         shuffle=True, 
+         num_workers=8)
     
     # print(len(dataloader))
     total_time = 0
@@ -259,13 +279,12 @@ if __name__ == "__main__":
         print(b["satellite_first"].shape)
         print(b["ground_second"].shape)
         print(b["satellite_second"].shape)
-        print(b["perturb"])
         print("===========================")
 
-        grd = b["ground_first"][0]
-        sat = b["satellite_first"][0]
-        mu_grd = b["ground_second"][0]
-        mu_sat = b["satellite_second"][0]
+        grd = b["ground_first"]
+        sat = b["satellite_first"]
+        mu_grd = b["ground_second"]
+        mu_sat = b["satellite_second"]
 
         sat = sat * 0.5 + 0.5
         grd = grd * 0.5 + 0.5
@@ -277,8 +296,8 @@ if __name__ == "__main__":
         torchvision.utils.save_image(mu_sat, "sat_s.png")
         torchvision.utils.save_image(mu_grd, "grd_s.png")
 
-        # if i == 2:
-        #     break
+        if i == 2:
+            break
         time.sleep(2)
 
     print(total_time / i)

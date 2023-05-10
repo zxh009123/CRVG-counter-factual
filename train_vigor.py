@@ -265,7 +265,14 @@ if __name__ == "__main__":
             writer.add_scalar('cf_loss', current_cf_loss, epoch)
 
         print("----------------------")
-        if epoch % 5 != 0:
+
+
+        # save last model
+        save_model(save_name, model, optimizer, lrSchedule, epoch, last=True)
+        # save descriptor to last model
+        SaveDescriptors(sat_desc, grd_desc, epoch, save_name, last=True)
+
+        if epoch % 5 != 0 and epoch < (number_of_epoch - 20):
             continue
 
         #Evaluation
@@ -320,10 +327,6 @@ if __name__ == "__main__":
             # For each 10th epoch save the descriptors
             if epoch % 10 == 0:
                 SaveDescriptors(sat_desc, grd_desc, epoch, save_name, last=False)
-            # save last model
-            save_model(save_name, model, optimizer, lrSchedule, epoch, last=True)
-            # save descriptor to last model
-            SaveDescriptors(sat_desc, grd_desc, epoch, save_name, last=True)
             print(f"=================================================")
 
     # get the best model and recall
