@@ -309,38 +309,38 @@ class GeoDTR(nn.Module):
         else:
             raise RuntimeError(f'backbone: {backbone} is not implemented')
 
-        self.GLE_grd = SCGeoLayoutExtractor(
-                        max_len = grd_feature_size, 
-                        d_model = output_channel, 
-                        descriptors = descriptors, 
-                        tr_heads = tr_heads, 
-                        tr_layers = tr_layers, 
-                        dropout = dropout, 
-                        d_hid = d_hid,
-                        normalize = normalize,
-                        orthogonalize = orthogonalize, 
-                        bottleneck = bottleneck)
+        # self.GLE_grd = SCGeoLayoutExtractor(
+        #                 max_len = grd_feature_size, 
+        #                 d_model = output_channel, 
+        #                 descriptors = descriptors, 
+        #                 tr_heads = tr_heads, 
+        #                 tr_layers = tr_layers, 
+        #                 dropout = dropout, 
+        #                 d_hid = d_hid,
+        #                 normalize = normalize,
+        #                 orthogonalize = orthogonalize, 
+        #                 bottleneck = bottleneck)
         
-        self.GLE_sat = SCGeoLayoutExtractor(
-                        max_len = sat_feature_size, 
-                        d_model = output_channel, 
-                        descriptors = descriptors, 
-                        tr_heads = tr_heads, 
-                        tr_layers = tr_layers, 
-                        dropout = dropout, 
-                        d_hid = d_hid, 
-                        normalize = normalize,
-                        orthogonalize = orthogonalize, 
-                        bottleneck = bottleneck)
+        # self.GLE_sat = SCGeoLayoutExtractor(
+        #                 max_len = sat_feature_size, 
+        #                 d_model = output_channel, 
+        #                 descriptors = descriptors, 
+        #                 tr_heads = tr_heads, 
+        #                 tr_layers = tr_layers, 
+        #                 dropout = dropout, 
+        #                 d_hid = d_hid, 
+        #                 normalize = normalize,
+        #                 orthogonalize = orthogonalize, 
+        #                 bottleneck = bottleneck)
 
-        # self.GLE_grd = GeoLayoutExtractor(grd_feature_size, \
-        #     descriptors=8, tr_heads=4, \
-        #     tr_layers=2, dropout = 0.3,\
-        #     d_hid=2048)
-        # self.GLE_sat = GeoLayoutExtractor(sat_feature_size, \
-        #     descriptors=8, tr_heads=4, \
-        #     tr_layers=2, dropout = 0.3,\
-        #     d_hid=2048)
+        self.GLE_grd = GeoLayoutExtractor(grd_feature_size, \
+            descriptors=8, tr_heads=4, \
+            tr_layers=2, dropout = 0.3,\
+            d_hid=2048)
+        self.GLE_sat = GeoLayoutExtractor(sat_feature_size, \
+            descriptors=8, tr_heads=4, \
+            tr_layers=2, dropout = 0.3,\
+            d_hid=2048)
 
 
     def forward(self, sat, grd, is_cf):
