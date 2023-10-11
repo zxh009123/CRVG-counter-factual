@@ -21,9 +21,9 @@ from models.GeoDTR import GeoDTR
 
 args_do_not_overide = ['data_dir', 'verbose', 'dataset']
 
-def count_parameters(model):
-    params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    return params/1000000
+# def count_parameters(model):
+#     params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+#     return params/1000000
 
 
 def GetBestModel(path):
@@ -92,7 +92,7 @@ if __name__ == "__main__":
     
     if opt.dataset == 'CVACT':
         data_path = os.path.join(opt.data_dir, 'CVACT')
-        dataset = ACTDataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='test', is_mutual=False)
+        dataset = ACTDataset(data_dir = data_path, geometric_aug='none', sematic_aug='none', is_polar=polar_transformation, mode='val', is_mutual=False)
         validateloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=8)
     if opt.dataset == 'CVUSA':
         data_path = os.path.join(opt.data_dir, 'CVUSA', 'dataset')
@@ -126,8 +126,8 @@ if __name__ == "__main__":
     # for k,v in torch.load(best_model)['model_state_dict'].items():
     #     print(k)
 
-    num_params = count_parameters(model)
-    print(f"model parameters : {num_params}M")
+    # num_params = count_parameters(model)
+    # print(f"model parameters : {num_params}M")
 
     print("start testing...")
 

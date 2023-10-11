@@ -4,8 +4,8 @@ import torch.nn.functional as F
 import torchvision.models as models
 import os
 import random
-# from thop import profile
-# from thop import clever_format
+from thop import profile
+from thop import clever_format
 if os.environ["USER"] == "xyli1905":
     from models.TR import TransformerEncoder, TransformerEncoderLayer
 else:
@@ -258,8 +258,8 @@ class GeoLayoutExtractor(nn.Module):
         mask = torch.einsum('bdj, jdi -> bdi', mask, self.w2) + self.b2
         mask = mask.permute(0,2,1) # B, H*W, D
         # lxy20230327 test normalized descriptor
-        # mask = F.hardtanh(mask)
-        mask = F.softmax(mask, dim=1) #now it a projection rather than a mask
+        mask = F.hardtanh(mask)
+        # mask = F.softmax(mask, dim=1) #now it a projection rather than a mask
 
         return mask
 
@@ -274,7 +274,6 @@ class GeoDTR(nn.Module):
         super().__init__()
         self.normalize = normalize
 
-        # TODO Debug the following code
         if backbone == 'convnext':
             self.backbone_grd = ConvNextTiny()
             self.backbone_sat = ConvNextTiny()
@@ -309,38 +308,38 @@ class GeoDTR(nn.Module):
         else:
             raise RuntimeError(f'backbone: {backbone} is not implemented')
 
-        # self.GLE_grd = SCGeoLayoutExtractor(
-        #                 max_len = grd_feature_size, 
-        #                 d_model = output_channel, 
-        #                 descriptors = descriptors, 
-        #                 tr_heads = tr_heads, 
-        #                 tr_layers = tr_layers, 
-        #                 dropout = dropout, 
-        #                 d_hid = d_hid,
-        #                 normalize = normalize,
-        #                 orthogonalize = orthogonalize, 
-        #                 bottleneck = bottleneck)
+        self.GLE_grd = SCGeoLayoutExtractor(
+                        max_len = grd_feature_size, 
+                        d_model = output_channel, 
+                        descriptors = descriptors, 
+                        tr_heads = tr_heads, 
+                        tr_layers = tr_layers, 
+                        dropout = dropout, 
+                        d_hid = d_hid,
+                        normalize = normalize,
+                        orthogonalize = orthogonalize, 
+                        bottleneck = bottleneck)
         
-        # self.GLE_sat = SCGeoLayoutExtractor(
-        #                 max_len = sat_feature_size, 
-        #                 d_model = output_channel, 
-        #                 descriptors = descriptors, 
-        #                 tr_heads = tr_heads, 
-        #                 tr_layers = tr_layers, 
-        #                 dropout = dropout, 
-        #                 d_hid = d_hid, 
-        #                 normalize = normalize,
-        #                 orthogonalize = orthogonalize, 
-        #                 bottleneck = bottleneck)
+        self.GLE_sat = SCGeoLayoutExtractor(
+                        max_len = sat_feature_size, 
+                        d_model = output_channel, 
+                        descriptors = descriptors, 
+                        tr_heads = tr_heads, 
+                        tr_layers = tr_layers, 
+                        dropout = dropout, 
+                        d_hid = d_hid, 
+                        normalize = normalize,
+                        orthogonalize = orthogonalize, 
+                        bottleneck = bottleneck)
 
-        self.GLE_grd = GeoLayoutExtractor(grd_feature_size, \
-            descriptors=8, tr_heads=4, \
-            tr_layers=2, dropout = 0.3,\
-            d_hid=2048)
-        self.GLE_sat = GeoLayoutExtractor(sat_feature_size, \
-            descriptors=8, tr_heads=4, \
-            tr_layers=2, dropout = 0.3,\
-            d_hid=2048)
+        # self.GLE_grd = GeoLayoutExtractor(grd_feature_size, \
+        #     descriptors=8, tr_heads=4, \
+        #     tr_layers=2, dropout = 0.3,\
+        #     d_hid=2048)
+        # self.GLE_sat = GeoLayoutExtractor(sat_feature_size, \
+        #     descriptors=8, tr_heads=4, \
+        #     tr_layers=2, dropout = 0.3,\
+        #     d_hid=2048)
 
 
     def forward(self, sat, grd, is_cf):
@@ -430,15 +429,15 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     #ACT and USA style
-    sat = torch.randn(8, 3, 122, 671).to(device)
-    # sat = torch.randn(8, 3, 256, 256).to(device)
-    grd = torch.randn(8, 3, 122, 671).to(device)
+    sat = torch.randn(1, 3, 122, 671).to(device)
+    # sat = torch.randn(1, 3, 256, 256).to(device)
+    grd = torch.randn(1, 3, 122, 671).to(device)
 
     # VIGOR style
     # sat = torch.randn(32, 3, 320, 320).to(device)
     # grd = torch.randn(32, 3, 320, 640).to(device)
 
-    model = GeoDTR(descriptors=4, \
+    model = GeoDTR(descriptors=8, \
         tr_heads=4, \
         tr_layers=2, \
         dropout = 0.3, \
@@ -447,16 +446,17 @@ if __name__ == "__main__":
         backbone='convnext', \
         dataset='CVUSA')
     model = model.to(device)
+    
     result = model(sat, grd, True)
 
     for i in result:
         print(i.shape)
 
-    # macs, params = profile(model, inputs=(sat, grd, False, ))
-    # macs, params = clever_format([macs, params], "%.3f")
+    macs, params = profile(model, inputs=(sat, grd, False, ))
+    macs, params = clever_format([macs, params], "%.3f")
 
-    # print(macs)
-    # print(params)
+    print(macs)
+    print(params)
 
     # net = SCGeoLayoutExtractor(\
     #     max_len=768, 

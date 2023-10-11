@@ -300,6 +300,12 @@ class VIGOR(torch.utils.data.Dataset):
             img_query = Image.open(self.test_list[index])
             img_query = self.transform_query(img_query)
             return img_query, torch.tensor(index), torch.tensor(self.test_label[index][0])
+        elif 'test_all' in self.mode:
+            img_query = Image.open(self.test_list[index])
+            img_query = self.transform_query(img_query)
+            img_reference = Image.open(self.test_sat_list[self.test_label[index][0]]).convert('RGB')
+            img_reference = self.transform_reference(img_reference)
+            return img_query, img_reference
         else:
             print('not implemented!!')
             raise Exception
@@ -312,6 +318,8 @@ class VIGOR(torch.utils.data.Dataset):
         elif 'test_reference' in self.mode:
             return len(self.test_sat_list)
         elif 'test_query' in self.mode:
+            return len(self.test_list)
+        elif 'test_all' in self.mode:
             return len(self.test_list)
         else:
             print('not implemented!')

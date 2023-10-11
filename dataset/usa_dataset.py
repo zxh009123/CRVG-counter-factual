@@ -210,7 +210,8 @@ class USADataset(Dataset):
                 return {'satellite_first':satellite_first, 
                         'ground_first':ground_first,
                         'satellite_second':satellite_second,
-                        'ground_second':ground_second}
+                        'ground_second':ground_second,
+                        'perturb':'none'}
                 
 
             hflip = random.randint(0,1)
@@ -260,18 +261,18 @@ if __name__ == "__main__":
 
     dataloader = DataLoader(
         USADataset(data_dir='../scratch/CVUSA/dataset/', 
-                   geometric_aug='same', 
+                   geometric_aug='strong', 
                    sematic_aug='strong', 
                    mode='train', 
                    is_polar=False),\
          batch_size=4, 
-         shuffle=True, 
+         shuffle=False, 
          num_workers=8)
     
     # print(len(dataloader))
     total_time = 0
     start = time.time()
-    for i,b in enumerate(dataloader):
+    for k,b in enumerate(dataloader):
         end = time.time()
         elapse = end - start
         print("===========================")
@@ -281,23 +282,23 @@ if __name__ == "__main__":
         print(b["satellite_second"].shape)
         print("===========================")
 
-        grd = b["ground_first"]
-        sat = b["satellite_first"]
-        mu_grd = b["ground_second"]
-        mu_sat = b["satellite_second"]
+        for i in range(4):
+            grd = b["ground_first"][i]
+            sat = b["satellite_first"][i]
+            mu_grd = b["ground_second"][i]
+            mu_sat = b["satellite_second"][i]
 
-        sat = sat * 0.5 + 0.5
-        grd = grd * 0.5 + 0.5
-        mu_sat = mu_sat * 0.5 + 0.5
-        mu_grd = mu_grd * 0.5 + 0.5
+            sat = sat * 0.5 + 0.5
+            grd = grd * 0.5 + 0.5
+            mu_sat = mu_sat * 0.5 + 0.5
+            mu_grd = mu_grd * 0.5 + 0.5
 
-        torchvision.utils.save_image(sat, "sat_f.png")
-        torchvision.utils.save_image(grd, "grd_f.png")
-        torchvision.utils.save_image(mu_sat, "sat_s.png")
-        torchvision.utils.save_image(mu_grd, "grd_s.png")
+            torchvision.utils.save_image(sat, f"sat_f_{i}.png")
+            torchvision.utils.save_image(grd, f"grd_f_{i}.png")
+            torchvision.utils.save_image(mu_sat, f"sat_s_{i}.png")
+            torchvision.utils.save_image(mu_grd, f"grd_s_{i}.png")
 
-        if i == 2:
+        if k == 2:
             break
         time.sleep(2)
 
-    print(total_time / i)

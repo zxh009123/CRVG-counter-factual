@@ -32,6 +32,46 @@ args_do_not_overide = ['verbose', 'resume_from']
 backbone_lists = ['resnet', 'convnext']
 torch.autograd.set_detect_anomaly(True)
 
+def validate_top(grd_descriptor, sat_descriptor, dataloader):
+    accuracy_top1p = 0.0
+    accuracy_top1 = 0.0
+    accuracy_top5 = 0.0
+    accuracy_top10 = 0.0
+    accuracy_hit = 0.0
+
+    data_amount = 0.0
+    dist_array = 2 - 2 * np.matmul(grd_descriptor, np.transpose(sat_descriptor))
+
+    top1_percent = int(dist_array.shape[1] * 0.01) + 1
+    top1 = 1
+    top5 = 5
+    top10 = 10
+    for i in range(dist_array.shape[0]):
+        gt_dist = dist_array[i, dataloader.dataset.test_label[i][0]]
+        prediction = np.sum(dist_array[i, :] < gt_dist)
+
+        dist_temp = np.ones(dist_array[i, :].shape[0])
+        dist_temp[dataloader.dataset.test_label[i][1:]] = 0
+        prediction_hit = np.sum((dist_array[i, :] < gt_dist) * dist_temp)
+
+        if prediction < top1_percent:
+            accuracy_top1p += 1.0
+        if prediction < top1:
+            accuracy_top1 += 1.0
+        if prediction < top5:
+            accuracy_top5 += 1.0
+        if prediction < top10:
+            accuracy_top10 += 1.0
+        if prediction_hit < top1:
+            accuracy_hit += 1.0
+        data_amount += 1.0
+    accuracy_top1p /= data_amount
+    accuracy_top1 /= data_amount
+    accuracy_top5 /= data_amount
+    accuracy_top10 /= data_amount
+    accuracy_hit /= data_amount
+    return [accuracy_top1, accuracy_top5, accuracy_top10, accuracy_top1p, accuracy_hit]
+
 def GetBestModel(path):
     all_files = os.listdir(path)
     config_files =  list(filter(lambda x: x.startswith('epoch_'), all_files))
@@ -280,6 +320,8 @@ if __name__ == "__main__":
         grd_global_descriptor = np.zeros([len(val_query), embedding_dims])
         query_labels = np.zeros([len(val_query)])
 
+        # len(val_query_loader.dataset.test_label)
+
         model.eval()
         with torch.no_grad():
             for (images, indexes, _) in tqdm(val_reference_loader, disable = opt.verbose):
@@ -300,16 +342,18 @@ if __name__ == "__main__":
                 grd_global_descriptor[indexes.numpy(), :] = grd_global.detach().cpu().numpy()
                 query_labels[indexes.numpy()] = labels.numpy()
 
-            valAcc = validateVIGOR(grd_global_descriptor, sat_global_descriptor, query_labels.astype(int))
+            # valAcc = validateVIGOR(grd_global_descriptor, sat_global_descriptor, query_labels.astype(int))
+            valAcc = validate_top(grd_global_descriptor, sat_global_descriptor, val_query_loader)
             logger.info("validation result")
             print(f"------------------------------------")
             try:
-                #print recall value
+                # print recall value
                 top1 = valAcc[0]
                 print('top1', ':', valAcc[0])
                 print('top5', ':', valAcc[1])
                 print('top10', ':', valAcc[2])
-                print('top1%', ':', valAcc[-1])
+                print('top1%', ':', valAcc[3])
+                print('hit rate', ':', valAcc[4])
                 # write to tensorboard
                 writer.add_scalars('validation recall@k',{
                     'top 1':valAcc[0],

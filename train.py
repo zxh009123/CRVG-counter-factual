@@ -59,8 +59,8 @@ if __name__ == "__main__":
     parser.add_argument('--verbose', default=True, action='store_false', help='turn on progress bar')
     parser.add_argument('--no_polar', default=False, action='store_true', help='turn off polar transformation')
     parser.add_argument("--resume_from", type=str, default='None', help='resume from folder')
-    parser.add_argument('--geo_aug', default='strong', choices=['strong', 'weak', 'none'], help='geometric augmentation strength') 
-    parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none'], help='semantic augmentation strength')
+    parser.add_argument('--geo_aug', default='strong', choices=['strong', 'weak', 'none', 'same'], help='geometric augmentation strength') 
+    parser.add_argument('--sem_aug', default='strong', choices=['strong', 'weak', 'none', 'same'], help='semantic augmentation strength')
     parser.add_argument('--mutual', default=False, action='store_true', help='no mutual learning')
     parser.add_argument('--backbone', type=str, default='resnet', help='backbone selection')
 
@@ -159,7 +159,7 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-
+    num_workers = 16
     if opt.dataset == "CVUSA":
 
         dataloader = DataLoader(USADataset(data_dir = opt.data_dir, \
@@ -167,7 +167,7 @@ if __name__ == "__main__":
                                 sematic_aug=opt.sem_aug, mode='train', \
                                 is_polar=polar_transformation, \
                                 is_mutual=opt.mutual),\
-                                batch_size=batch_size, shuffle=True, num_workers=8)
+                                batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
         validateloader = DataLoader(USADataset(data_dir = opt.data_dir, \
                                     geometric_aug='none', \
@@ -175,7 +175,7 @@ if __name__ == "__main__":
                                     mode='val', \
                                     is_polar=polar_transformation, \
                                     is_mutual=False),\
-            batch_size=batch_size, shuffle=False, num_workers=8)
+            batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
 
     elif opt.dataset == "CVACT":
@@ -186,7 +186,7 @@ if __name__ == "__main__":
                         is_polar=polar_transformation, \
                         mode='train', \
                         is_mutual=opt.mutual)
-        dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+        dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
         #val
         validate_dataset = ACTDataset(data_dir = opt.data_dir, \
@@ -195,7 +195,7 @@ if __name__ == "__main__":
                             is_polar=polar_transformation, \
                             mode='val', \
                             is_mutual=False)
-        validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=8)
+        validateloader = DataLoader(validate_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     model = GeoDTR(descriptors=number_descriptors,
                     tr_heads=opt.TR_heads,
